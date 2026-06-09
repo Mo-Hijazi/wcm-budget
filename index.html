@@ -28,7 +28,7 @@
 <script src="https://unpkg.com/recharts@2.5.0/umd/Recharts.js"></script>
 <script type="text/babel" data-presets="react">
 window.storage={get:async(key)=>{try{const v=localStorage.getItem(key);return v?{key,value:v}:null}catch{return null}},set:async(key,value)=>{try{localStorage.setItem(key,value);return{key,value}}catch{return null}},delete:async(key)=>{try{localStorage.removeItem(key);return{key,deleted:true}}catch{return null}},list:async(prefix)=>{try{return{keys:Object.keys(localStorage).filter(k=>!prefix||k.startsWith(prefix))}}catch{return{keys:[]}}}};
-const{PieChart,Pie,Cell,BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,LineChart,Line}=Recharts;
+const{PieChart,Pie,Cell,BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,LineChart,Line,AreaChart,Area,Legend,ReferenceLine,ComposedChart}=Recharts;
 (function(){setInterval(()=>{const now=new Date();if(now.getDay()===0&&now.getHours()===23&&now.getMinutes()===59)window._triggerArchive&&window._triggerArchive()},60000)})();
 
 const { useState, useEffect, useCallback } = React;
@@ -237,6 +237,12 @@ const DEFAULT_STATE = {
   logo: null,  // null=WCM official, 'w'=monogram, or base64 data URL
   monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
   darkMode: false,
+  stepGoals: [
+    { id:"step1", label:"Step 1", targetAmount:850, targetDate:"2028-06-01", saved:0, monthlyContribution:50 },
+    { id:"step2", label:"Step 2 CK", targetAmount:850, targetDate:"2029-09-01", saved:0, monthlyContribution:50 },
+  ],
+  savingsGoals: [],
+  savingsLog: [],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -548,6 +554,18 @@ function App() {
   const [nyEnd, setNyEnd] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(null);  // catId to confirm removal
 
+  // Savings tab state
+  const [savingsDepositGoal, setSavingsDepositGoal] = useState(null);
+  const [savingsDepositAmt,  setSavingsDepositAmt]  = useState("");
+  const [savingsDepositNote, setSavingsDepositNote] = useState("");
+  const [savingsDepositDate, setSavingsDepositDate] = useState(todayStr());
+  const [showAddSavingsGoal, setShowAddSavingsGoal] = useState(false);
+  const [newGoalLabel,       setNewGoalLabel]       = useState("");
+  const [newGoalTarget,      setNewGoalTarget]      = useState("");
+  const [newGoalDate,        setNewGoalDate]        = useState("");
+  const [newGoalMonthly,     setNewGoalMonthly]     = useState("");
+  const [savingsApy,         setSavingsApy]         = useState("4.5");
+
   // Load
   useEffect(()=>{
     (async()=>{
@@ -562,6 +580,9 @@ function App() {
         if(loaded.logo===undefined) loaded.logo=null;
         if(!loaded.coverMonths) loaded.coverMonths={};
         if(!loaded.monthlyDeposits) loaded.monthlyDeposits={};
+        if(!loaded.stepGoals) loaded.stepGoals=JSON.parse(JSON.stringify(DEFAULT_STATE.stepGoals));
+        if(!loaded.savingsGoals) loaded.savingsGoals=[];
+        if(!loaded.savingsLog) loaded.savingsLog=[];
         loaded.years.forEach((y,i)=>{if(!y.startDate)Object.assign(y,YEAR_CONFIGS[i]);});
         setData(loaded);
       }
@@ -976,6 +997,77 @@ function App() {
       </Modal>}
       {showWeekPicker && <WeekSelectorModal archives={archives} currentWeekStart={currentWeekStart} currentWeekEnd={currentWeekEnd} selected={viewWeek} onSelect={setViewWeek} onClose={()=>setShowWeekPicker(false)}/>}
 
+      {savingsDepositGoal && (()=>{
+        const allGoals=[...(data.stepGoals||[]),...(data.savingsGoals||[])];
+        const g=allGoals.find(x=>x.id===savingsDepositGoal);
+        return g ? (
+          <Modal title={"Log deposit — "+g.label} onClose={()=>{setSavingsDepositGoal(null);setSavingsDepositAmt("");setSavingsDepositNote("");setSavingsDepositDate(todayStr());}} width={340}>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div>
+                <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Amount ($)</div>
+                <input type="number" placeholder="50.00" value={savingsDepositAmt} onChange={e=>setSavingsDepositAmt(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Date</div>
+                <input type="date" value={savingsDepositDate} onChange={e=>setSavingsDepositDate(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Note (optional)</div>
+                <input type="text" placeholder="e.g. August savings" value={savingsDepositNote} onChange={e=>setSavingsDepositNote(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              </div>
+              <button onClick={()=>{
+                const amt=parseFloat(savingsDepositAmt)||0;
+                if(!amt) return;
+                const d=JSON.parse(JSON.stringify(data));
+                const inStep=d.stepGoals.findIndex(x=>x.id===savingsDepositGoal);
+                const inCustom=d.savingsGoals.findIndex(x=>x.id===savingsDepositGoal);
+                if(inStep>=0) d.stepGoals[inStep].saved=Math.max(0,(d.stepGoals[inStep].saved||0)+amt);
+                else if(inCustom>=0) d.savingsGoals[inCustom].saved=Math.max(0,(d.savingsGoals[inCustom].saved||0)+amt);
+                if(!d.savingsLog) d.savingsLog=[];
+                d.savingsLog.push({id:"sl_"+Date.now(),goalId:savingsDepositGoal,amount:amt,date:savingsDepositDate,note:savingsDepositNote});
+                upd(d);
+                setSavingsDepositGoal(null);setSavingsDepositAmt("");setSavingsDepositNote("");setSavingsDepositDate(todayStr());
+              }} style={{padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.teal,color:C.bg,cursor:"pointer",marginTop:4}}>
+                Confirm deposit
+              </button>
+            </div>
+          </Modal>
+        ) : null;
+      })()}
+
+      {showAddSavingsGoal && (
+        <Modal title="Add savings goal" onClose={()=>{setShowAddSavingsGoal(false);setNewGoalLabel("");setNewGoalTarget("");setNewGoalDate("");setNewGoalMonthly("");}} width={360}>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div>
+              <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Goal name</div>
+              <input placeholder="e.g. Emergency fund, Laptop" value={newGoalLabel} onChange={e=>setNewGoalLabel(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Target amount ($)</div>
+                <input type="number" placeholder="1000" value={newGoalTarget} onChange={e=>setNewGoalTarget(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Monthly contribution ($)</div>
+                <input type="number" placeholder="50" value={newGoalMonthly} onChange={e=>setNewGoalMonthly(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Target date (optional)</div>
+              <input type="date" value={newGoalDate} onChange={e=>setNewGoalDate(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+            </div>
+            <button onClick={()=>{
+              if(!newGoalLabel.trim()||!newGoalTarget) return;
+              const d=JSON.parse(JSON.stringify(data));
+              d.savingsGoals.push({id:"sg_"+Date.now(),label:newGoalLabel.trim(),targetAmount:parseFloat(newGoalTarget)||0,saved:0,monthlyContribution:parseFloat(newGoalMonthly)||0,targetDate:newGoalDate});
+              upd(d);setShowAddSavingsGoal(false);setNewGoalLabel("");setNewGoalTarget("");setNewGoalDate("");setNewGoalMonthly("");
+            }} style={{padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.red,color:"#fff",cursor:"pointer",marginTop:4}}>
+              Add goal
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Header ── */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -1025,6 +1117,7 @@ function App() {
           ["budget","Budget"],
           ["weekly","Weekly"],
           ["charts","Charts"],
+          ["savings","Savings"],
           ["aid","Aid & Detail",0],
           ["subscriptions","Subscriptions",renewalsDue.length],
           ["customize","Categories"],
@@ -1328,54 +1421,310 @@ function App() {
       )}
 
       {/* ══════════════ CHARTS ══════════════ */}
-      {tab==="charts" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {tab==="charts" && (()=>{
+        // Running balance per month (cumulative)
+        const runBalData = MONTH_NAMES.map((m,mi)=>{
+          let bal=0; for(let i=0;i<=mi;i++) bal+=monthNetFor(i);
+          return {name:m, balance:Math.round(bal)};
+        });
+        // Budget vs actual per month for selected year
+        const budgetVsActual = MONTH_NAMES.map((m,mi)=>{
+          const mk=ay+"-"+m;
+          const disM=data.monthDisabled?.[mk]||[];
+          let budgeted=0;
+          cats.forEach(c=>{
+            if(disM.includes(c.id)) return;
+            if(c.id==="subs"){budgeted+=subsMo;return;}
+            const ov=yr.monthlyOverrides?.[m]?.[c.id];
+            budgeted+=(ov!==undefined?ov:(Number(yr.monthly[c.id])||0));
+          });
+          const calMo=(mi+7)%12;
+          const actual=allEntriesFlat.filter(e=>new Date(e.date+"T12:00:00").getMonth()===calMo).reduce((a,e)=>a+Number(e.amount),0);
+          return {name:m, Budgeted:Math.round(budgeted), Actual:Math.round(actual)};
+        });
+        return (
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {/* Running balance */}
             <Card>
-              <SectionTitle>{yr.label} — spending distribution</SectionTitle>
-              <ResponsiveContainer width="100%" height={210}>
-                <PieChart><Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={54} outerRadius={88} paddingAngle={2}>
-                  {pieData.map((e,i)=><Cell key={i} fill={e.color}/>)}
-                </Pie><Tooltip formatter={v=>fmt(v)+"/mo"}/></PieChart>
+              <SectionTitle>Running balance — {yr.label}</SectionTitle>
+              <div style={{fontSize:11,color:C.gray,marginBottom:10}}>Cumulative surplus/deficit from August through each month. Positive = ahead of budget.</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={runBalData} margin={{top:4,right:4,bottom:0,left:0}}>
+                  <defs>
+                    <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
+                    </linearGradient>
+                    <linearGradient id="balGradNeg" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={C.red} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.red} stopOpacity={0.02}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+(v>=0?"+":"")+Math.round(v)} axisLine={false} tickLine={false} width={52}/>
+                  <Tooltip formatter={v=>[fmtS(v),"Balance"]} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                  <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
+                  <Area type="monotone" dataKey="balance" stroke={runBalData[selMonth]?.balance>=0?C.teal:C.red} fill={runBalData[selMonth]?.balance>=0?"url(#balGrad)":"url(#balGradNeg)"} strokeWidth={2} dot={(p)=>p.index===selMonth?<circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={p.value>=0?C.teal:C.red}/>:<circle key={p.index} r={0}/>}/>
+                </AreaChart>
               </ResponsiveContainer>
             </Card>
+
+            {/* Budget vs Actual */}
             <Card>
-              <SectionTitle>Category breakdown</SectionTitle>
-              {cats.map((cat,i)=>{
-                const amt=cat.id==="subs"?subsMo:(Number(rawMonthly[cat.id])||0);
-                const pct=moSpend>0?Math.round(amt/moSpend*100):0;
-                return <div key={cat.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:10,height:10,borderRadius:3,background:CHART_COLORS[i%CHART_COLORS.length],flexShrink:0}}/>
-                    <span style={{color:C.text}}>{cat.label}</span>
+              <SectionTitle>Budget vs actual — {yr.label}</SectionTitle>
+              <div style={{display:"flex",gap:20,marginBottom:10}}>
+                {[["Budgeted",C.teal],["Actual",C.red]].map(([l,c])=>(
+                  <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.gray}}>
+                    <div style={{width:10,height:10,borderRadius:3,background:c}}/>{l}
                   </div>
-                  <div style={{display:"flex",gap:10}}>
-                    <span style={{fontWeight:600}}>{fmt(amt)}/mo</span>
-                    <span style={{color:C.gray,minWidth:28,textAlign:"right"}}>{pct}%</span>
+                ))}
+                <div style={{fontSize:11,color:C.gray,marginLeft:"auto",alignSelf:"center"}}>Actual = logged weekly entries only</div>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={budgetVsActual} barGap={2} barCategoryGap="28%">
+                  <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
+                  <Tooltip formatter={v=>fmt(v)} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                  <Bar dataKey="Budgeted" fill={C.teal} radius={[3,3,0,0]} opacity={0.85}/>
+                  <Bar dataKey="Actual" fill={C.red} radius={[3,3,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Pie + breakdown */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+              <Card>
+                <SectionTitle>{yr.label} — spending distribution</SectionTitle>
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart><Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={54} outerRadius={88} paddingAngle={2}>
+                    {pieData.map((e,i)=><Cell key={i} fill={e.color}/>)}
+                  </Pie><Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></PieChart>
+                </ResponsiveContainer>
+              </Card>
+              <Card>
+                <SectionTitle>Category breakdown — {MONTH_NAMES[selMonth]}</SectionTitle>
+                {cats.map((cat,i)=>{
+                  const amt=cat.id==="subs"?subsMo:(Number(rawMonthly[cat.id])||0);
+                  const pct=moSpend>0?Math.round(amt/moSpend*100):0;
+                  return <div key={cat.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:10,height:10,borderRadius:3,background:CHART_COLORS[i%CHART_COLORS.length],flexShrink:0}}/>
+                      <span style={{color:C.text}}>{cat.label}</span>
+                    </div>
+                    <div style={{display:"flex",gap:10}}>
+                      <span style={{fontWeight:600}}>{fmt(amt)}/mo</span>
+                      <span style={{color:C.gray,minWidth:28,textAlign:"right"}}>{pct}%</span>
+                    </div>
+                  </div>;
+                })}
+              </Card>
+            </div>
+
+            {/* Multi-year comparison */}
+            <Card>
+              <SectionTitle>Monthly spendable vs budget — all years</SectionTitle>
+              <div style={{display:"flex",gap:20,marginBottom:12}}>
+                {[["Spendable",C.teal],["Budget",C.red]].map(([l,c])=>(
+                  <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.gray}}>
+                    <div style={{width:10,height:10,borderRadius:3,background:c}}/>{l}
                   </div>
-                </div>;
-              })}
+                ))}
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={barData} barGap={4}>
+                  <XAxis dataKey="name" tick={{fontSize:12,fill:C.gray}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
+                  <Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                  <Bar dataKey="Spendable" fill={C.teal} radius={[4,4,0,0]}/>
+                  <Bar dataKey="Spend" fill={C.red} radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
             </Card>
           </div>
+        );
+      })()}
+
+      {/* ══════════════ SAVINGS ══════════════ */}
+      {tab==="savings" && (
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+          {/* STEP Exam Goals */}
           <Card>
-            <SectionTitle>Monthly spendable vs budget — all years</SectionTitle>
-            <div style={{display:"flex",gap:20,marginBottom:12}}>
-              {[["Spendable",C.teal],["Budget",C.red]].map(([l,c])=>(
-                <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.gray}}>
-                  <div style={{width:10,height:10,borderRadius:3,background:c}}/>{l}
-                </div>
-              ))}
+            <SectionTitle>STEP Exam Fund</SectionTitle>
+            <div style={{fontSize:11,color:C.gray,marginBottom:14}}>Each Step exam costs ~$670–950. Track your savings here and stop contributing once fully funded.</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {(data.stepGoals||[]).map(g=>{
+                const pct=g.targetAmount>0?Math.min(100,Math.round((g.saved||0)/g.targetAmount*100)):0;
+                const remaining=Math.max(0,g.targetAmount-(g.saved||0));
+                const funded=remaining===0;
+                const monthsToFund=(!funded&&g.monthlyContribution>0)?Math.ceil(remaining/g.monthlyContribution):null;
+                const projDate=monthsToFund!=null?(()=>{const d=new Date();d.setMonth(d.getMonth()+monthsToFund);return d.toLocaleDateString("en-US",{month:"short",year:"numeric"});})():null;
+                return (
+                  <div key={g.id} style={{padding:"14px",border:`1px solid ${funded?C.green:C.border}`,borderRadius:10,background:C.bgDark}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                      <div>
+                        <div style={{fontWeight:700,fontSize:14,color:C.text}}>{g.label}</div>
+                        <div style={{fontSize:11,color:C.gray,marginTop:2}}>
+                          {funded?"Fully funded!!":`${fmt(g.saved||0)} saved · ${fmt(remaining)} to go · target ${fmt(g.targetAmount)}`}
+                        </div>
+                      </div>
+                      <Pill ok={funded} warn={!funded&&pct<50}>{pct}%</Pill>
+                    </div>
+                    <ProgressBar value={g.saved||0} max={g.targetAmount} color={funded?C.green:C.teal}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,flexWrap:"wrap",gap:8}}>
+                      <div style={{fontSize:11,color:C.gray}}>
+                        {funded?"No further contributions needed."
+                          :projDate?`At ${fmt(g.monthlyContribution)}/mo → funded by ${projDate}`
+                          :"Set a monthly contribution below to see projected date."}
+                      </div>
+                      {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:7,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
+                    </div>
+                    {!funded&&(
+                      <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                        <span style={{color:C.gray}}>Monthly:</span>
+                        <input type="number" value={g.monthlyContribution||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].monthlyContribution=Number(e.target.value)||0;upd(d);}} style={{width:72,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <span style={{color:C.gray}}>/mo</span>
+                        <span style={{color:C.gray,marginLeft:8}}>Target:</span>
+                        <input type="number" value={g.targetAmount} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:72,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <span style={{color:C.gray,marginLeft:8}}>Date:</span>
+                        <input type="date" value={g.targetDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetDate=e.target.value;upd(d);}} style={{fontSize:11,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={barData} barGap={4}>
-                <XAxis dataKey="name" tick={{fontSize:12}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:11}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false}/>
-                <Tooltip formatter={v=>fmt(v)+"/mo"}/>
-                <Bar dataKey="Spendable" fill={C.teal} radius={[4,4,0,0]}/>
-                <Bar dataKey="Spend" fill={C.red} radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
           </Card>
+
+          {/* Custom Goals */}
+          <Card>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <SectionTitle>Custom Goals</SectionTitle>
+              <button onClick={()=>setShowAddSavingsGoal(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>+ Add goal</button>
+            </div>
+            {(data.savingsGoals||[]).length===0
+              ?<div style={{textAlign:"center",padding:"20px 0",color:C.gray,fontSize:13}}>No custom goals yet — add one above.</div>
+              :(data.savingsGoals||[]).map((g,gi)=>{
+                const pct=g.targetAmount>0?Math.min(100,Math.round((g.saved||0)/g.targetAmount*100)):0;
+                const remaining=Math.max(0,g.targetAmount-(g.saved||0));
+                const funded=remaining===0;
+                const monthsToFund=(!funded&&g.monthlyContribution>0)?Math.ceil(remaining/g.monthlyContribution):null;
+                const projDate=monthsToFund!=null?(()=>{const d=new Date();d.setMonth(d.getMonth()+monthsToFund);return d.toLocaleDateString("en-US",{month:"short",year:"numeric"});})():null;
+                return (
+                  <div key={g.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontWeight:600,fontSize:13,color:C.text}}>{g.label}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <Pill ok={funded} warn={!funded&&pct<50}>{pct}%</Pill>
+                        {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
+                        <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${C.redMid}`,background:C.redLight,color:C.red,cursor:"pointer"}}>×</button>
+                      </div>
+                    </div>
+                    <ProgressBar value={g.saved||0} max={g.targetAmount} color={funded?C.green:CHART_COLORS[(gi+2)%CHART_COLORS.length]}/>
+                    <div style={{fontSize:11,color:C.gray,marginTop:4}}>{fmt(g.saved||0)} / {fmt(g.targetAmount)}{projDate&&!funded?` · funded by ${projDate}`:""}</div>
+                  </div>
+                );
+              })
+            }
+          </Card>
+
+          {/* Growth Projector */}
+          <Card>
+            <SectionTitle>Growth Projector</SectionTitle>
+            <div style={{fontSize:11,color:C.gray,marginBottom:12}}>How your running balance + monthly savings could grow over 60 months at a given APY (e.g. a HYSA).</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+              <span style={{fontSize:13,color:C.textMid,fontWeight:500}}>APY</span>
+              <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
+              <span style={{fontSize:12,color:C.gray}}>%</span>
+              <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:runningBalance>=0?C.teal:C.red}}>{fmtS(runningBalance)}</strong></span>
+              <span style={{fontSize:12,color:C.gray}}>+ {fmt(yr.monthly.savings||0)}/mo savings</span>
+            </div>
+            {(()=>{
+              const apy=parseFloat(savingsApy)||0;
+              const r=apy/100/12;
+              const mSav=Number(yr.monthly.savings)||0;
+              const projData=Array.from({length:60}).map((_,i)=>{
+                const mo=i+1;
+                const compBal=runningBalance*Math.pow(1+r,mo);
+                const savGrowth=r>0?mSav*(Math.pow(1+r,mo)-1)/r:mSav*mo;
+                return {name:mo%12===0?`Yr ${mo/12}`:(mo===1?"Now":""),month:mo,balance:Math.round(compBal+savGrowth)};
+              });
+              return (
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={projData} margin={{top:4,right:4,bottom:0,left:0}}>
+                    <defs>
+                      <linearGradient id="projGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v>=1000?"$"+Math.round(v/1000)+"k":("$"+v)} axisLine={false} tickLine={false} width={44}/>
+                    <Tooltip formatter={v=>[fmt(v),"Projected balance"]} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                    <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
+                    <Area type="monotone" dataKey="balance" stroke={C.teal} fill="url(#projGrad)" strokeWidth={2}/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </Card>
+
+          {/* Recommendations */}
+          <Card>
+            <SectionTitle>Recommendations</SectionTitle>
+            {(()=>{
+              const recs=[];
+              const stepSaved=(data.stepGoals||[]).reduce((a,g)=>a+(g.saved||0),0);
+              const stepNeeded=(data.stepGoals||[]).reduce((a,g)=>a+g.targetAmount,0);
+              const stepGap=Math.max(0,stepNeeded-stepSaved);
+              if(stepGap>0) recs.push({color:C.amber,text:`STEP fund gap: ${fmt(stepGap)} still needed. Allocate ~${fmt(Math.ceil(stepGap/24))}/mo to be ready by Year 3.`});
+              else recs.push({color:C.green,text:"Both STEP exam goals are fully funded — excellent!"});
+              if(!(yr.monthly.savings||0)) recs.push({color:C.red,text:"No savings line in your budget. Even $50–100/mo builds a 3-month emergency fund by graduation."});
+              else recs.push({color:C.teal,text:`You're budgeting ${fmt(yr.monthly.savings)}/mo for savings — that's ${fmt((yr.monthly.savings||0)*12)}/yr compounding.`});
+              if(runningBalance>moSpendable*2) recs.push({color:C.green,text:`Running balance of ${fmt(runningBalance)} is strong. A HYSA at 4–5% APY earns you passive interest on idle cash.`});
+              if(moSurplus>50) recs.push({color:C.teal,text:`${fmt(moSurplus)} monthly surplus available. Routing it to a savings goal adds ${fmt(moSurplus*12)} to your cushion this year.`});
+              if((data.savingsGoals||[]).length===0&&(data.stepGoals||[]).every(g=>(g.saved||0)>=g.targetAmount)) recs.push({color:C.blue,text:"All goals funded! Consider adding a custom goal — laptop upgrade, travel for residency interviews, or a 6-month emergency fund."});
+              return recs.map((r,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                  <div style={{width:8,height:8,borderRadius:99,background:r.color,flexShrink:0,marginTop:4}}/>
+                  <span style={{color:C.textMid,lineHeight:1.7}}>{r.text}</span>
+                </div>
+              ));
+            })()}
+          </Card>
+
+          {/* Deposit History */}
+          <Card>
+            <SectionTitle>Deposit History</SectionTitle>
+            {(data.savingsLog||[]).length===0
+              ?<div style={{textAlign:"center",padding:"20px 0",color:C.gray,fontSize:13}}>No deposits logged yet.</div>
+              :[...(data.savingsLog||[])].sort((a,b)=>b.date.localeCompare(a.date)).map((entry,i)=>{
+                  const allGoals=[...(data.stepGoals||[]),...(data.savingsGoals||[])];
+                  const goal=allGoals.find(g=>g.id===entry.goalId);
+                  return (
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                      <div style={{width:8,height:8,borderRadius:99,background:C.teal,flexShrink:0}}/>
+                      <div style={{flex:1}}>
+                        <span style={{fontWeight:600,color:C.text}}>{goal?.label||"Unknown goal"}</span>
+                        {entry.note&&<span style={{color:C.gray}}> · {entry.note}</span>}
+                        <div style={{fontSize:11,color:C.gray,marginTop:2}}>{entry.date}</div>
+                      </div>
+                      <span style={{fontWeight:700,color:C.teal}}>{fmt(entry.amount)}</span>
+                      <button onClick={()=>{
+                        const d=JSON.parse(JSON.stringify(data));
+                        const inStep=d.stepGoals.findIndex(x=>x.id===entry.goalId);
+                        const inCustom=d.savingsGoals.findIndex(x=>x.id===entry.goalId);
+                        if(inStep>=0) d.stepGoals[inStep].saved=Math.max(0,(d.stepGoals[inStep].saved||0)-entry.amount);
+                        else if(inCustom>=0) d.savingsGoals[inCustom].saved=Math.max(0,(d.savingsGoals[inCustom].saved||0)-entry.amount);
+                        d.savingsLog=d.savingsLog.filter((_,j)=>j!==i);
+                        upd(d);
+                      }} style={{width:26,height:26,borderRadius:6,background:C.bg,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
+                    </div>
+                  );
+                })
+            }
+          </Card>
+
         </div>
       )}
 
