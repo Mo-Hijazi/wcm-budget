@@ -233,6 +233,7 @@ const DEFAULT_STATE = {
   weeklyRollover: {},
   surplusBank: 0,
   coverMonths: {},
+  monthlyDeposits: {},
   logo: null,  // null=WCM official, 'w'=monogram, or base64 data URL
   monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
   darkMode: false,
@@ -565,6 +566,7 @@ function App() {
         if(loaded.darkMode===undefined) loaded.darkMode=false;
         if(loaded.logo===undefined) loaded.logo=null;
         if(!loaded.coverMonths) loaded.coverMonths={};
+        if(!loaded.monthlyDeposits) loaded.monthlyDeposits={};
         loaded.years.forEach((y,i)=>{if(!y.startDate)Object.assign(y,YEAR_CONFIGS[i]);});
         setData(loaded);
       }
@@ -667,9 +669,11 @@ function App() {
   const unbudgetedCats = cats.filter(c=>!c.locked && !c.autoCalc && disabledCats.includes(c.id) && spentInMonth(c.id,selMonth)>0);
   const unbudgetedTotal = unbudgetedCats.reduce((a,c)=>a+spentInMonth(c.id,selMonth),0);
 
-  const moSurplus   = moSpendable - moSpend - unbudgetedTotal;  // selected month's net
+  // Amount swept from this month's surplus into the bank (no longer free cash this month)
+  const depositedThisMonth = data.monthlyDeposits?.[ay+"-"+MONTH_NAMES[selMonth]] || 0;
+  const moSurplusRaw = moSpendable - moSpend - unbudgetedTotal - depositedThisMonth;  // free cash this month
 
-  // Annual net: sum each month's planned budget + actual unbudgeted spend (one-time, not x12)
+  // Annual net: planned budget + actual unbudgeted spend across all months (deposits are savings, not spend, so excluded)
   let annualPlanned = 0, annualUnbudgeted = 0;
   MONTH_NAMES.forEach((mn, mi) => {
     const disM = data.monthDisabled?.[ay+"-"+mn] || [];
@@ -685,7 +689,7 @@ function App() {
   });
   const curYrNet = moSpendable*12 - annualPlanned - annualUnbudgeted;
 
-  // ── Surplus bank with LIVE deficit coverage (auto-reverses when entries change) ──
+  // ── Surplus bank with LIVE, partial, reversible deficit coverage ──
   const coverMonths = data.coverMonths || {};
   const yearSpendable = (y) => (Math.max((Number(y.grant)||0)-(Number(y.tuitionFees)||0)-(Number(y.healthIns)||0),0) + (Number(y.otherIncome)||0)*12)/12;
   const monthOutflowFor = (yIdx, mi) => {
@@ -698,20 +702,36 @@ function App() {
       if(disM.includes(c.id)){ if(!c.locked&&!c.autoCalc) total+=spentInMonth(c.id,mi); }
       else { const ov=y.monthlyOverrides?.[mn]?.[c.id]; total += (ov!==undefined?ov:(Number(y.monthly[c.id])||0)); }
     });
+    total += data.monthlyDeposits?.[y.id+"-"+mn]||0;  // banked surplus is committed, counts as outflow this month
     return total;
   };
   const monthDeficitFor = (yIdx, mi) => Math.max(0, monthOutflowFor(yIdx,mi) - yearSpendable(data.years[yIdx]));
-  const totalCovered = Object.keys(coverMonths).filter(k=>coverMonths[k]).reduce((a,k)=>{
+  const totalCoveredDeficits = Object.keys(coverMonths).filter(k=>coverMonths[k]).reduce((a,k)=>{
     const parts=k.split("-"); const yId=Number(parts[0]); const mn=parts[1];
     const yIdx=data.years.findIndex(y=>y.id===yId); if(yIdx<0) return a;
     return a + monthDeficitFor(yIdx, MONTH_NAMES.indexOf(mn));
   }, 0);
   const surplusBankRaw = data.surplusBank||0;
-  const surplusBankBal = Math.max(0, surplusBankRaw - totalCovered);
-  const thisMonthDeficit = Math.max(0, moSpend + unbudgetedTotal - moSpendable);
-  const thisMonthCovered = !!coverMonths[ay+"-"+MONTH_NAMES[selMonth]];
+  const bankUsed = Math.min(totalCoveredDeficits, surplusBankRaw);  // can't use more than you have
+  const surplusBankBal = surplusBankRaw - bankUsed;
 
-  const depositToSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=(d.surplusBank||0)+Number(amt);upd(d);setSurplusAmt("");setShowSurplus(false);};
+  const thisMonthDeficit = Math.max(0, -moSurplusRaw);
+  const thisMonthCovered = !!coverMonths[ay+"-"+MONTH_NAMES[selMonth]];
+  // how much of THIS month's deficit the bank actually covers (partial allowed)
+  const thisMonthCoverable = Math.min(thisMonthDeficit, surplusBankRaw);
+  const thisMonthCoveredAmt = thisMonthCovered ? thisMonthCoverable : 0;
+  const moSurplus = moSurplusRaw + thisMonthCoveredAmt;  // after coverage, shows remaining position
+  // Clean description of where this month's money went
+  const surplusFlowSub =
+      (depositedThisMonth>0 && thisMonthCoveredAmt>0) ? `${fmt(depositedThisMonth)} banked · ${fmt(thisMonthCoveredAmt)} drawn`
+    : depositedThisMonth>0   ? `${fmt(depositedThisMonth)} sent to surplus bank`
+    : thisMonthCoveredAmt>0  ? `${fmt(thisMonthCoveredAmt)} drawn from surplus bank`
+    : moSurplus>0            ? "available to save"
+    : moSurplus<0            ? "over budget"
+    :                          "balanced";
+  const surplusColor = moSurplus<0 ? C.red : (depositedThisMonth>0||thisMonthCoveredAmt>0) ? C.teal : moSurplus>0 ? C.green : C.gray;
+
+  const depositToSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=(d.surplusBank||0)+Number(amt);if(!d.monthlyDeposits)d.monthlyDeposits={};const mk=ay+"-"+MONTH_NAMES[selMonth];d.monthlyDeposits[mk]=(d.monthlyDeposits[mk]||0)+Number(amt);upd(d);setSurplusAmt("");setShowSurplus(false);};
   const withdrawFromSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=Math.max(0,(d.surplusBank||0)-Number(amt));upd(d);setSurplusAmt("");setShowSurplus(false);};
   const coverDeficitMonth = (mi) => {const d=JSON.parse(JSON.stringify(data));if(!d.coverMonths)d.coverMonths={};d.coverMonths[ay+"-"+MONTH_NAMES[mi]]=true;upd(d);};
   const uncoverDeficitMonth = (mi) => {const d=JSON.parse(JSON.stringify(data));if(d.coverMonths)delete d.coverMonths[ay+"-"+MONTH_NAMES[mi]];upd(d);};
@@ -836,14 +856,12 @@ function App() {
     const deficit=Math.round((plannedTotal+unbudgetedSpend)-moSpendable);
 
     const availBank = Math.max(0,(d.surplusBank||0));
-    if(isUnbudgeted && deficit>0){
-      if(availBank >= deficit) setWeeklyNotice({type:"offer", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx});
-      else setWeeklyNotice({type:"warn", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, bank:availBank});
+    if(deficit>0 && availBank>0){
+      setWeeklyNotice({type:"offer", cat:isUnbudgeted?(catObj?.label):null, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx, bank:availBank});
+    } else if(deficit>0){
+      setWeeklyNotice({type:"warn", cat:isUnbudgeted?(catObj?.label):null, month:MONTH_FULL[eMonthIdx], deficit, bank:availBank});
     } else if(isUnbudgeted){
       setWeeklyNotice({type:"info", cat:catObj?.label, month:MONTH_FULL[eMonthIdx]});
-    } else if(deficit>0){
-      if(availBank >= deficit) setWeeklyNotice({type:"offer", cat:null, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx});
-      else setWeeklyNotice({type:"warn", cat:null, month:MONTH_FULL[eMonthIdx], deficit, bank:availBank});
     }
   };
   const delEntry = (eid, isArchived) => {
@@ -949,7 +967,7 @@ function App() {
         <div style={{fontSize:13,color:C.textMid,marginBottom:8,lineHeight:1.6}}>
           {weeklyNotice.month} spending is now <strong style={{color:C.red}}>{fmt(weeklyNotice.deficit)}</strong> over your monthly income{weeklyNotice.cat?<>, after logging <strong>{weeklyNotice.cat}</strong></>:""}.
         </div>
-        <div style={{fontSize:12,color:C.gray,marginBottom:16}}>Your surplus bank ({fmt(weeklyNotice.bank)}) can't fully cover the gap. Consider trimming another category this month, or it'll draw down future savings.</div>
+        <div style={{fontSize:12,color:C.gray,marginBottom:16}}>Your surplus bank is empty, so this gap can't be covered. Consider trimming another category this month.</div>
         <button onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.red,color:"#fff",cursor:"pointer"}}>Got it</button>
       </Modal>}
       {confirmYearRemove!==null && <Modal title="Remove year" onClose={()=>setConfirmYearRemove(null)} width={350}>
@@ -1048,7 +1066,7 @@ function App() {
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <MetricTile label="Monthly spendable"  value={fmt(moSpendable)} sub="after school costs" color={C.teal}/>
         <MetricTile label="Monthly budget"     value={fmt(moSpend)}     sub={`${fmt(moSpend-subsMo)} direct + ${fmt(subsMo)} subs`}/>
-        <MetricTile label="Monthly surplus"    value={fmtS(moSurplus)}  sub={moSurplus>=0?"on track":"over budget"} color={moSurplus>=0?C.green:C.red}/>
+        <MetricTile label="Monthly surplus"    value={fmtS(moSurplus)}  sub={surplusFlowSub} color={surplusColor}/>
         <MetricTile label="This year net"      value={fmtS(curYrNet)}   sub={yr.label.split("—")[0].trim()} color={curYrNet>=0?C.green:C.red}/>
       </div>
 
@@ -1171,19 +1189,19 @@ function App() {
               )}
               {thisMonthDeficit>0 && thisMonthCovered && (
                 <div style={{marginTop:10,padding:"10px 12px",background:C.tealLight,borderRadius:8,fontSize:12,color:C.teal,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <span>{`${fmt(thisMonthDeficit)} deficit covered from your surplus bank.`}</span>
+                  <span>{fmt(thisMonthCoveredAmt)} of the {fmt(thisMonthDeficit)} deficit covered from your surplus bank.{thisMonthDeficit-thisMonthCoveredAmt>0?` ${fmt(thisMonthDeficit-thisMonthCoveredAmt)} still uncovered.`:""}</span>
                   <button onClick={()=>uncoverDeficitMonth(selMonth)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:`1px solid ${C.tealMid}`,borderRadius:6,background:"transparent",color:C.teal,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Undo</button>
                 </div>
               )}
-              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal>=thisMonthDeficit && (
+              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal>0 && (
                 <div style={{marginTop:10,padding:"10px 12px",background:C.amberLight,borderRadius:8,fontSize:12,color:C.amber,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <span>{`${fmt(thisMonthDeficit)} over budget this month. Cover it from your surplus bank?`}</span>
-                  <button onClick={()=>coverDeficitMonth(selMonth)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Cover deficit</button>
+                  <span>{fmt(thisMonthDeficit)} over this month. Use {fmt(Math.min(thisMonthDeficit,surplusBankBal))} from your bank ({fmt(surplusBankBal)})?{thisMonthDeficit>surplusBankBal?` ${fmt(thisMonthDeficit-surplusBankBal)} would remain.`:""}</span>
+                  <button onClick={()=>coverDeficitMonth(selMonth)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Use {fmt(Math.min(thisMonthDeficit,surplusBankBal))}</button>
                 </div>
               )}
-              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal<thisMonthDeficit && (
+              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal<=0 && (
                 <div style={{marginTop:10,padding:"10px 12px",background:C.redLight,borderRadius:8,fontSize:12,color:C.red,fontWeight:500}}>
-                  {`${fmt(thisMonthDeficit)} over budget this month — more than your surplus bank (${fmt(surplusBankBal)}) can cover. Consider trimming a category.`}
+                  {`${fmt(thisMonthDeficit)} over budget this month and your surplus bank is empty. Consider trimming a category.`}
                 </div>
               )}
             </Card>
@@ -1254,15 +1272,17 @@ function App() {
               <strong>{weeklyNotice.cat}</strong> wasn't in your {weeklyNotice.month} budget, so it's now tracked under <strong>Unbudgeted spending</strong> in the Budget tab. Tap "Add to budget" there if you want to plan for it.
             </Banner>
           )}
-          {weeklyNotice && weeklyNotice.type==="offer" && (
-            <div style={{padding:"12px 14px",background:C.amberLight,borderRadius:10,fontSize:13,color:C.amber,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-              <span>{weeklyNotice.cat?<><strong>{weeklyNotice.cat}</strong> spending puts </>:<>This puts </>}{weeklyNotice.month} {fmt(weeklyNotice.deficit)} over your income. Cover it from your surplus bank?</span>
+          {weeklyNotice && weeklyNotice.type==="offer" && (()=>{
+            const use=Math.min(weeklyNotice.deficit,weeklyNotice.bank);
+            const remain=weeklyNotice.deficit-use;
+            return <div style={{padding:"12px 14px",background:C.amberLight,borderRadius:10,fontSize:13,color:C.amber,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <span>{weeklyNotice.cat?<><strong>{weeklyNotice.cat}</strong> puts </>:<>This puts </>}{weeklyNotice.month} {fmt(weeklyNotice.deficit)} over. Use {fmt(use)} from your surplus bank ({fmt(weeklyNotice.bank)})?{remain>0?` ${fmt(remain)} would remain uncovered.`:""}</span>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
-                <button onClick={()=>{coverDeficitMonth(weeklyNotice.monthIdx);setWeeklyNotice(null);}} style={{padding:"5px 12px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>Cover {fmt(weeklyNotice.deficit)}</button>
+                <button onClick={()=>{coverDeficitMonth(weeklyNotice.monthIdx);setWeeklyNotice(null);}} style={{padding:"5px 12px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>Use {fmt(use)}</button>
                 <button onClick={()=>setWeeklyNotice(null)} style={{padding:"5px 10px",fontSize:12,border:`1px solid ${C.amberMid}`,borderRadius:6,background:"transparent",color:C.amber,cursor:"pointer"}}>Dismiss</button>
               </div>
-            </div>
-          )}
+            </div>;
+          })()}
           {/* Week bar */}
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{flex:1,fontSize:14,fontWeight:600,color:C.text}}>
