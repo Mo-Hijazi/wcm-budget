@@ -13,9 +13,10 @@
 <link rel="apple-touch-icon" href="icon.svg"/>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; transition: background .3s; }
   #root { min-height: 100vh; }
   #loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-size: 14px; color: #64748b; font-family: system-ui; }
+  input, select, textarea { color-scheme: light dark; }
 </style>
 </head>
 <body>
@@ -28,43 +29,32 @@
 <script src="https://unpkg.com/recharts@2.5.0/umd/Recharts.js"></script>
 
 <script type="text/babel" data-presets="react">
-// ── Storage polyfill (localStorage-backed, mirrors artifact storage API) ──────
 window.storage = {
-  get: async (key) => {
-    try { const v = localStorage.getItem(key); return v ? { key, value: v } : null; } catch { return null; }
-  },
-  set: async (key, value) => {
-    try { localStorage.setItem(key, value); return { key, value }; } catch { return null; }
-  },
-  delete: async (key) => {
-    try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; }
-  },
-  list: async (prefix) => {
-    try {
-      const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-      return { keys };
-    } catch { return { keys: [] }; }
-  }
+  get: async (key) => { try { const v = localStorage.getItem(key); return v ? { key, value: v } : null; } catch { return null; } },
+  set: async (key, value) => { try { localStorage.setItem(key, value); return { key, value }; } catch { return null; } },
+  delete: async (key) => { try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; } },
+  list: async (prefix) => { try { return { keys: Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix)) }; } catch { return { keys: [] }; } }
 };
-
-// ── Make recharts available as named imports ───────────────────────────────────
 const { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } = Recharts;
-
-// ── Sunday archiving: runs every minute, triggers at Sun 23:59 local ──────────
 (function scheduleArchive() {
-  setInterval(() => {
-    const now = new Date();
-    if (now.getDay() === 0 && now.getHours() === 23 && now.getMinutes() === 59) {
-      window._triggerArchive && window._triggerArchive();
-    }
-  }, 60000);
+  setInterval(() => { const now = new Date(); if (now.getDay()===0 && now.getHours()===23 && now.getMinutes()===59) window._triggerArchive && window._triggerArchive(); }, 60000);
 })();
 
 const { useState, useEffect, useCallback } = React;
 // recharts loaded above
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
+const getTheme = (dark) => dark ? {
+  red:"#ef4444", redLight:"#450a0a", redMid:"#7f1d1d",
+  teal:"#2dd4bf", tealLight:"#042f2e", tealMid:"#115e59",
+  amber:"#fbbf24", amberLight:"#451a03", amberMid:"#78350f",
+  green:"#4ade80", greenLight:"#052e16", greenMid:"#14532d",
+  blue:"#60a5fa", blueLight:"#172554", blueMid:"#1e3a5f",
+  border:"#334155", borderDark:"#475569",
+  bg:"#0f172a", bgDark:"#1e293b",
+  white:"#1e293b", text:"#f1f5f9", textMid:"#cbd5e1", gray:"#94a3b8",
+  purple:"#a78bfa", purpleLight:"#2e1065",
+} : {
   red:"#b31b1b", redLight:"#fef2f2", redMid:"#fecaca",
   teal:"#0f766e", tealLight:"#f0fdfa", tealMid:"#99f6e4",
   amber:"#b45309", amberLight:"#fffbeb", amberMid:"#fcd34d",
@@ -75,6 +65,7 @@ const C = {
   white:"#ffffff", text:"#0f172a", textMid:"#475569", gray:"#64748b",
   purple:"#6d28d9", purpleLight:"#f5f3ff",
 };
+let C = getTheme(false);
 const CHART_COLORS = ["#0f766e","#1d4ed8","#b45309","#6d28d9","#b91c1c","#be185d","#15803d","#c2410c","#475569","#0369a1"];
 
 // ── SVG brand icons (inline, no external deps) ────────────────────────────────
@@ -135,8 +126,19 @@ const BRANDS = {
 
 function getBrand(name) {
   if(!name) return null;
-  const k = name.toLowerCase().trim();
-  return BRANDS[k] || Object.entries(BRANDS).find(([bk])=>k.includes(bk))?.[1] || null;
+  const k = name.toLowerCase().trim().replace(/[^a-z0-9+ ]/g,"");
+  // Exact match
+  if(BRANDS[k]) return BRANDS[k];
+  // Partial match (brand key in name or name in brand key)
+  const partial = Object.entries(BRANDS).find(([bk])=>k.includes(bk)||bk.includes(k));
+  if(partial) return partial[1];
+  // Word match (any word in name matches a brand key word)
+  const words = k.split(/\s+/);
+  const wordMatch = Object.entries(BRANDS).find(([bk])=>{
+    const bWords = bk.split(/\s+/);
+    return words.some(w=>w.length>2 && bWords.some(bw=>bw.includes(w)||w.includes(bw)));
+  });
+  return wordMatch?.[1] || null;
 }
 
 const BrandIcon = ({name, size=36}) => {
@@ -166,11 +168,11 @@ const CAT_ICONS = {
 // NOTE: Grant already includes health insurance ($8,100) — WCM covers it
 // So grant displayed = base grant + healthIns; school deducts tuitionFees + healthIns
 const YEAR_CONFIGS = [
-  { id:0, label:"Year 1 — 2026-27", type:"standard",  tuitionFees:76648, healthIns:8100, grant:109848, otherIncome:0, housing:996,  housingNote:"Olin Hall",      wcmLivingAllowance:21440, notes:"" },
-  { id:1, label:"Year 2 — 2027-28", type:"standard",  tuitionFees:76648, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:25728, notes:"" },
-  { id:2, label:"Year 3 — 2028-29", type:"standard",  tuitionFees:76486, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:23584, notes:"" },
-  { id:3, label:"Year 4 — 2029-30", type:"standard",  tuitionFees:76486, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:23584, notes:"" },
-  { id:4, label:"Extended — 2030-31",type:"extended", tuitionFees:5232,  healthIns:8100, grant:0,      otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:25728, notes:"" },
+  { id:0, label:"Year 1 — 2026-27", type:"standard",  tuitionFees:76648, healthIns:8100, grant:109848, otherIncome:0, housing:996,  housingNote:"Olin Hall",      wcmLivingAllowance:21440, notes:"", startDate:"2026-08-01", endDate:"2027-08-15" },
+  { id:1, label:"Year 2 — 2027-28", type:"standard",  tuitionFees:76648, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:25728, notes:"", startDate:"2027-08-01", endDate:"2028-08-15" },
+  { id:2, label:"Year 3 — 2028-29", type:"standard",  tuitionFees:76486, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:23584, notes:"", startDate:"2028-08-01", endDate:"2029-08-15" },
+  { id:3, label:"Year 4 — 2029-30", type:"standard",  tuitionFees:76486, healthIns:8100, grant:109848, otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:23584, notes:"", startDate:"2029-08-01", endDate:"2030-08-15" },
+  { id:4, label:"Extended — 2030-31",type:"extended", tuitionFees:5232,  healthIns:8100, grant:0,      otherIncome:0, housing:1370, housingNote:"Lasdon Two-Share",wcmLivingAllowance:25728, notes:"", startDate:"2030-08-01", endDate:"2031-06-30" },
 ];
 
 const DEFAULT_CATS = [
@@ -193,14 +195,20 @@ const DEFAULT_MONTHLY = [
   {housing:1370,food:380,transport:132,personal:150,books:50, exams:50, savings:0,  social:80,subs:0},
 ];
 
+const MONTH_NAMES = ["Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul"];
+const MONTH_FULL = ["August","September","October","November","December","January","February","March","April","May","June","July"];
+
 const DEFAULT_STATE = {
   categories: DEFAULT_CATS,
   years: YEAR_CONFIGS.map((cfg,i)=>({...cfg, monthly:{...DEFAULT_MONTHLY[i]}})),
   weeklyArchive: [],
   currentWeekEntries: [],
   subscriptions: [],
-  monthlyRollover: {},   // {YYYY-MM: amount}
-  weeklyRollover: {},    // {weekStart: amount}
+  monthlyRollover: {},
+  weeklyRollover: {},
+  surplusBank: 0,
+  monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
+  darkMode: false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -321,6 +329,7 @@ const YrBtn = ({yr, active, onClick}) => (
   }}>
     {yr.label.split("—")[0].trim()}
     {yr.type==="extended" ? " ★" : ""}
+    {yr.startDate && <span style={{display:"block",fontSize:9,color:"inherit",opacity:0.7,marginTop:1}}>{new Date(yr.startDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"})} – {new Date(yr.endDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",year:"2-digit"})}</span>}
   </button>
 );
 
@@ -477,17 +486,34 @@ function App() {
   // Cat form
   const [newCatName, setNewCatName] = useState("");
 
+  // Month selector (0=Aug, 11=Jul for academic year)
+  const [selMonth, setSelMonth] = useState(0);
+
+  // Surplus bank dialog
+  const [showSurplus, setShowSurplus] = useState(false);
+  const [surplusAmt, setSurplusAmt] = useState("");
+
   // Load
   useEffect(()=>{
     (async()=>{
-      try{const r=await window.storage.get("wcm_v7");setData(r?.value?JSON.parse(r.value):JSON.parse(JSON.stringify(DEFAULT_STATE)));}
-      catch{setData(JSON.parse(JSON.stringify(DEFAULT_STATE)));}
+      try{
+        let r=await window.storage.get("wcm_v8");
+        if(!r?.value){r=await window.storage.get("wcm_v7");}
+        const loaded=r?.value?JSON.parse(r.value):JSON.parse(JSON.stringify(DEFAULT_STATE));
+        // Migrate: add new fields if missing
+        if(loaded.surplusBank===undefined) loaded.surplusBank=0;
+        if(!loaded.monthDisabled) loaded.monthDisabled={};
+        if(loaded.darkMode===undefined) loaded.darkMode=false;
+        loaded.years.forEach((y,i)=>{if(!y.startDate)Object.assign(y,YEAR_CONFIGS[i]);});
+        setData(loaded);
+      }
+      catch(e){console.error(e);setData(JSON.parse(JSON.stringify(DEFAULT_STATE)));}
       setReady(true);
     })();
   },[]);
 
   const save = useCallback(async d => {
-    try{await window.storage.set("wcm_v7",JSON.stringify(d));setFlash(true);setTimeout(()=>setFlash(false),1400);}catch{}
+    try{await window.storage.set("wcm_v8",JSON.stringify(d));setFlash(true);setTimeout(()=>setFlash(false),1400);}catch{}
   },[]);
 
   const upd = d => { setData(d); save(d); };
@@ -514,6 +540,9 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[ready]);
 
+  // Update theme when dark mode changes
+  if(data?.darkMode !== undefined) C = getTheme(data.darkMode);
+
   if(!ready) return <div style={{padding:40,color:C.gray,fontSize:14,fontFamily:"system-ui"}}>Loading…</div>;
 
   const yr   = data.years[ay];
@@ -534,6 +563,16 @@ function App() {
 
   // Current year net (this academic year only)
   const curYrNet = moSurplus * 12;
+
+  // Surplus bank
+  const surplusBankBal = data.surplusBank||0;
+  const depositToSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=(d.surplusBank||0)+Number(amt);upd(d);setSurplusAmt("");setShowSurplus(false);};
+  const withdrawFromSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=Math.max(0,(d.surplusBank||0)-Number(amt));upd(d);setSurplusAmt("");setShowSurplus(false);};
+
+  // Month-disabled categories
+  const monthKey = ay+"-"+MONTH_NAMES[selMonth];
+  const disabledCats = data.monthDisabled?.[monthKey]||[];
+  const toggleMonthCat = (catId) => {const d=JSON.parse(JSON.stringify(data));if(!d.monthDisabled)d.monthDisabled={};const mk=ay+"-"+MONTH_NAMES[selMonth];const cur=d.monthDisabled[mk]||[];d.monthDisabled[mk]=cur.includes(catId)?cur.filter(c=>c!==catId):[...cur,catId];upd(d);};
 
   // 5-yr
   const totDisburse = data.years.reduce((a,y)=>a+Math.max((Number(y.grant)||0)-(Number(y.tuitionFees)||0)-(Number(y.healthIns)||0),0)+(Number(y.otherIncome)||0)*12,0);
@@ -681,7 +720,7 @@ function App() {
   const isPastWeekDate = wDate && getMonday(wDate) < getMonday(new Date());
 
   return (
-    <div style={{fontFamily:"'Inter',system-ui,sans-serif",maxWidth:940,margin:"0 auto",padding:"24px 20px",minHeight:"100vh"}}>
+    <div style={{fontFamily:"'Inter',system-ui,sans-serif",maxWidth:940,margin:"0 auto",padding:"24px 20px",minHeight:"100vh",background:C.bg,color:C.text,transition:"background .3s, color .3s"}}>
       {/* Modals */}
       {renewDlg && <RenewalDialog sub={renewDlg} onClose={()=>setRenewDlg(null)} onConfirm={handleRenewal}/>}
       {showWeekPicker && <WeekSelectorModal archives={archives} currentWeekStart={currentWeekStart} currentWeekEnd={currentWeekEnd} selected={viewWeek} onSelect={setViewWeek} onClose={()=>setShowWeekPicker(false)}/>}
@@ -697,6 +736,7 @@ function App() {
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           {flash && <span style={{fontSize:12,color:C.teal,fontWeight:600}}>Saved</span>}
+          <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",cursor:"pointer"}} title="Toggle dark mode">{data.darkMode?"☀️":"🌙"}</button>
           <button onClick={()=>upd(JSON.parse(JSON.stringify(DEFAULT_STATE)))} style={{fontSize:11,padding:"5px 12px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>Reset defaults</button>
         </div>
       </div>
@@ -743,7 +783,12 @@ function App() {
       {tab==="budget" && (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
           <Card>
-            <SectionTitle>{yr.label} — Monthly budget</SectionTitle>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <SectionTitle>{yr.label} — Monthly budget</SectionTitle>
+              <select value={selMonth} onChange={e=>setSelMonth(Number(e.target.value))} style={{fontSize:12,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:7,background:C.bg,color:C.text,cursor:"pointer"}}>
+                {MONTH_NAMES.map((m,i)=><option key={m} value={i}>{MONTH_FULL[i]}</option>)}
+              </select>
+            </div>
 
             {/* Housing — read-only */}
             <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.bg,borderRadius:8,marginBottom:10,border:`1px solid ${C.border}`}}>
@@ -756,7 +801,8 @@ function App() {
 
             {cats.filter(c=>!c.locked).map((cat,i)=>{
               const isAuto = cat.autoCalc===true;
-              const amt = cat.id==="subs" ? subsMo : (Number(yr.monthly[cat.id])||0);
+              const isDisabled = disabledCats.includes(cat.id);
+              const amt = isDisabled ? 0 : (cat.id==="subs" ? subsMo : (Number(yr.monthly[cat.id])||0));
               const pct = moSpend>0?Math.round(amt/moSpend*100):0;
               return (
                 <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
@@ -768,6 +814,7 @@ function App() {
                         style={{width:80,textAlign:"right",fontSize:13,border:`1px solid ${C.border}`,borderRadius:7,padding:"4px 8px",background:C.bg,color:C.text,fontWeight:600}}/>
                   }
                   <span style={{fontSize:10,color:C.gray,width:28,textAlign:"right"}}>{pct}%</span>
+                  <button onClick={()=>toggleMonthCat(cat.id)} style={{width:20,height:20,borderRadius:4,border:`1px solid ${isDisabled?C.redMid:C.greenMid}`,background:isDisabled?C.redLight:C.greenLight,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",color:isDisabled?C.red:C.green,flexShrink:0}} title={isDisabled?"Enable for "+MONTH_NAMES[selMonth]:"Disable for "+MONTH_NAMES[selMonth]}>{isDisabled?"−":"✓"}</button>
                 </div>
               );
             })}
@@ -831,6 +878,27 @@ function App() {
                   </div>
                 </div>
               ))}
+            </Card>
+
+            <Card accent={C.teal}>
+              <SectionTitle>Surplus bank</SectionTitle>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                <div style={{fontSize:24,fontWeight:700,color:C.teal}}>{fmt(surplusBankBal)}</div>
+                <Pill ok={surplusBankBal>0} neutral={surplusBankBal===0} sm>saved</Pill>
+              </div>
+              <div style={{fontSize:11,color:C.gray,marginBottom:12}}>Monthly surplus goes here instead of auto-spending. Withdraw when you need it.</div>
+              {!showSurplus ? (
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setSurplusAmt(String(Math.max(moSurplus,0)));setShowSurplus("deposit");}} style={{flex:1,padding:"7px",fontSize:12,fontWeight:600,border:`1px solid ${C.tealMid}`,borderRadius:7,background:C.tealLight,color:C.teal,cursor:"pointer"}}>+ Deposit</button>
+                  <button onClick={()=>{setSurplusAmt("");setShowSurplus("withdraw");}} disabled={surplusBankBal<=0} style={{flex:1,padding:"7px",fontSize:12,fontWeight:600,border:`1px solid ${surplusBankBal>0?C.amberMid:C.border}`,borderRadius:7,background:surplusBankBal>0?C.amberLight:C.bgDark,color:surplusBankBal>0?C.amber:C.gray,cursor:surplusBankBal>0?"pointer":"not-allowed"}}>− Withdraw</button>
+                </div>
+              ) : (
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <input type="number" placeholder="Amount" value={surplusAmt} onChange={e=>setSurplusAmt(e.target.value)} style={{flex:1,fontSize:12,border:`1px solid ${C.border}`,borderRadius:7,padding:"6px 10px",background:C.bg,color:C.text}}/>
+                  <button onClick={()=>showSurplus==="deposit"?depositToSurplus(surplusAmt):withdrawFromSurplus(surplusAmt)} style={{padding:"6px 14px",fontSize:12,fontWeight:600,border:"none",borderRadius:7,background:showSurplus==="deposit"?C.teal:C.amber,color:"#fff",cursor:"pointer"}}>{showSurplus==="deposit"?"Deposit":"Withdraw"}</button>
+                  <button onClick={()=>setShowSurplus(false)} style={{padding:"6px 10px",fontSize:12,border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",color:C.gray,cursor:"pointer"}}>✕</button>
+                </div>
+              )}
             </Card>
 
             <Card>
@@ -1304,16 +1372,11 @@ function App() {
 }
 
 
-// ── Mount ─────────────────────────────────────────────────────────────────────
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(App));
 </script>
-
 <script>
-// ── PWA Service Worker ─────────────────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
