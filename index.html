@@ -473,7 +473,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
 function WeekSelectorModal({archives, currentWeekStart, currentWeekEnd, selected, onSelect, onClose}) {
   const allWeeks = [
     {weekStart:currentWeekStart, weekEnd:currentWeekEnd, isCurrent:true},
-    ...archives.map(a=>({...a, isCurrent:false})),
+    ...archives.filter(a=>a.entries&&a.entries.length>0).map(a=>({...a, isCurrent:false})),
   ];
   return (
     <Modal title="Select a week" onClose={onClose} width={380}>
@@ -805,8 +805,8 @@ function App() {
       {/* ── Header ── */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#b31b1b 0%,#8b1515 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,position:"relative",overflow:"hidden"}}>
-              <svg width="28" height="28" viewBox="0 0 100 100" fill="none"><path d="M50 8L12 30V70L50 92L88 70V30L50 8Z" fill="none" stroke="white" strokeWidth="4"/><path d="M50 18L20 35V65L50 82L80 65V35L50 18Z" fill="rgba(255,255,255,0.1)"/><text x="50" y="58" textAnchor="middle" fill="white" fontFamily="Georgia,serif" fontSize="30" fontWeight="700">W</text></svg>
+          <div style={{width:38,height:38,borderRadius:10,overflow:"hidden",flexShrink:0,background:"#b31b1b"}}>
+              <img src="https://brand.weill.cornell.edu/profiles/wcmc/themes/wcm_brand_base/favicons/mstile-144x144.png?v=2" alt="WCM" width="38" height="38" style={{objectFit:"cover"}} onError={(e)=>{e.target.onerror=null;e.target.src="https://www.google.com/s2/favicons?domain=weill.cornell.edu&sz=128";}}/>
             </div>
           <div>
             <div style={{fontSize:17,fontWeight:700,color:C.text,letterSpacing:"-0.02em"}}>WCM Budget Planner</div>
@@ -902,7 +902,9 @@ function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,fontWeight:700}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span>Total</span>
-                <button onClick={()=>setShowAddCat(true)} style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.gray}} title="Add a category for this month">+</button>
+<button onClick={()=>setShowAddCat(true)} style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:13,lineHeight:1}}>+</span> Add category
+                </button>
               </div>
               <span style={{color:moSpend>moSpendable?C.red:C.text}}>{fmt(moSpend)}/mo</span>
             </div>
@@ -926,10 +928,11 @@ function App() {
                 </div>
               ))}
               {moSurplus!==0 && (
-                <div style={{marginTop:10,padding:"8px 12px",background:moSurplus>=0?C.greenLight:C.redLight,borderRadius:8,fontSize:12,color:moSurplus>=0?C.green:C.red,fontWeight:500}}>
-                  {moSurplus>=0
+                <div style={{marginTop:10,padding:"10px 12px",background:moSurplus>=0?C.greenLight:C.redLight,borderRadius:8,fontSize:12,color:moSurplus>=0?C.green:C.red,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <span>{moSurplus>=0
                     ? `${fmt(moSurplus)}/mo surplus. ${rolloverReco(moSurplus)||"Consider increasing savings."}`
-                    : `${fmt(Math.abs(moSurplus))}/mo over budget. Review discretionary spending.`}
+                    : `${fmt(Math.abs(moSurplus))}/mo over budget. Review discretionary spending.`}</span>
+                  {moSurplus>0 && <button onClick={()=>depositToSurplus(moSurplus)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.green,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Save to surplus</button>}
                 </div>
               )}
             </Card>
