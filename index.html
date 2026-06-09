@@ -619,6 +619,19 @@ function App() {
   // Month-disabled categories
   const monthKey = ay+"-"+MONTH_NAMES[selMonth];
   const disabledCats = data.monthDisabled?.[monthKey]||[];
+  const promoteToBudget = (catId) => {
+    const d=JSON.parse(JSON.stringify(data));
+    const mk=MONTH_NAMES[selMonth];
+    // remove from disabled
+    const dk=ay+"-"+mk;
+    if(d.monthDisabled?.[dk]) d.monthDisabled[dk]=d.monthDisabled[dk].filter(c=>c!==catId);
+    // set this month's budget to at least what's been spent
+    const spent=spentInMonth(catId,selMonth);
+    if(!d.years[ay].monthlyOverrides) d.years[ay].monthlyOverrides={};
+    if(!d.years[ay].monthlyOverrides[mk]) d.years[ay].monthlyOverrides[mk]={};
+    d.years[ay].monthlyOverrides[mk][catId]=Math.ceil(spent);
+    upd(d);
+  };
   const toggleMonthCat = (catId) => {const d=JSON.parse(JSON.stringify(data));if(!d.monthDisabled)d.monthDisabled={};const mk=ay+"-"+MONTH_NAMES[selMonth];const cur=d.monthDisabled[mk]||[];d.monthDisabled[mk]=cur.includes(catId)?cur.filter(c=>c!==catId):[...cur,catId];upd(d);};
 
   // Effective monthly value for a specific academic month index
@@ -638,7 +651,21 @@ function App() {
   const rawMonthly = {};
   cats.forEach(c => { rawMonthly[c.id] = disabledCats.includes(c.id) ? 0 : (c.id==="subs" ? subsMo : getMonthVal(c.id)); });
   const moSpend     = moTotal(rawMonthly);
-  const moSurplus   = moSpendable - moSpend;
+
+  // Spent in a given academic month (sums all dated entries in that calendar month)
+  const allEntriesFlat = [...(data.currentWeekEntries||[]), ...((data.weeklyArchive||[]).flatMap(a=>a.entries||[]))];
+  const spentInMonth = (catId, mIdx) => {
+    const calMonth = (mIdx + 7) % 12;
+    return allEntriesFlat.filter(e=>{
+      const dt=new Date(e.date+"T12:00:00");
+      return e.catId===catId && dt.getMonth()===calMonth;
+    }).reduce((a,e)=>a+Number(e.amount),0);
+  };
+  // Unbudgeted categories for the selected month: removed from plan but have spending
+  const unbudgetedCats = cats.filter(c=>!c.locked && !c.autoCalc && disabledCats.includes(c.id) && spentInMonth(c.id,selMonth)>0);
+  const unbudgetedTotal = unbudgetedCats.reduce((a,c)=>a+spentInMonth(c.id,selMonth),0);
+
+  const moSurplus   = moSpendable - moSpend - unbudgetedTotal;
 
   // Current year net (this academic year only)
   const curYrNet = moSurplus * 12;
@@ -699,7 +726,8 @@ function App() {
     const mk=MONTH_NAMES[selMonth];
     if(!d.years[yi].monthlyOverrides) d.years[yi].monthlyOverrides={};
     if(!d.years[yi].monthlyOverrides[mk]) d.years[yi].monthlyOverrides[mk]={};
-    d.years[yi].monthlyOverrides[mk][cid]=Number(v)||0;
+    const minV = Math.ceil(spentInMonth(cid,selMonth));  // can't budget below logged spending
+    d.years[yi].monthlyOverrides[mk][cid]=Math.max(Number(v)||0, minV);
     upd(d);
   };
   const setYrF = (yi,f,v) => {const d=JSON.parse(JSON.stringify(data));d.years[yi][f]=v;upd(d);};
@@ -742,25 +770,10 @@ function App() {
     if(!d.currentWeekEntries) d.currentWeekEntries=[];
     if(!d.weeklyArchive) d.weeklyArchive=[];
 
-    // Detect if this category is unbudgeted for the entry's month
     const eMonthIdx = (new Date(wDate+"T12:00:00").getMonth() - 7 + 12) % 12;
     const mk = ay+"-"+MONTH_NAMES[eMonthIdx];
     const catObj = cats.find(c=>c.id===wCat);
-    let autoAdded = false;
-    // Re-enable if removed for that month
-    if(d.monthDisabled?.[mk]?.includes(wCat)){
-      d.monthDisabled[mk] = d.monthDisabled[mk].filter(c=>c!==wCat);
-      autoAdded = true;
-    }
-    // If category has no monthly budget, seed it from this expense (~monthly estimate)
-    const baseVal = (d.years[ay].monthlyOverrides?.[MONTH_NAMES[eMonthIdx]]?.[wCat]);
-    const effVal = baseVal!==undefined ? baseVal : (Number(d.years[ay].monthly[wCat])||0);
-    if(effVal===0 && wCat!=="subs"){
-      if(!d.years[ay].monthlyOverrides) d.years[ay].monthlyOverrides={};
-      if(!d.years[ay].monthlyOverrides[MONTH_NAMES[eMonthIdx]]) d.years[ay].monthlyOverrides[MONTH_NAMES[eMonthIdx]]={};
-      d.years[ay].monthlyOverrides[MONTH_NAMES[eMonthIdx]][wCat] = Math.round(amtNum*4.333);
-      autoAdded = true;
-    }
+    const isUnbudgeted = d.monthDisabled?.[mk]?.includes(wCat) && wCat!=="subs";
 
     if(entryWeek < thisWeek) {
       const ex = d.weeklyArchive.find(a=>a.weekStart===entryWeek);
@@ -773,17 +786,25 @@ function App() {
     }
     upd(d);setWAmt("");setWNote("");
 
-    // Recompute month budget vs spendable to warn / offer surplus
-    const newMoSpend = moTotal({...d.years[ay].monthly, ...(d.years[ay].monthlyOverrides?.[MONTH_NAMES[eMonthIdx]]||{}), subs:subsMo});
-    const deficit = newMoSpend - moSpendable;
-    if(autoAdded && deficit>0){
-      if((d.surplusBank||0) >= deficit) setWeeklyNotice({type:"offer", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx});
+    // Compute month outflow (planned budgets + actual unbudgeted spending) vs spendable
+    const allFlat=[...(d.currentWeekEntries||[]),...((d.weeklyArchive||[]).flatMap(a=>a.entries||[]))];
+    const spentCat=(cid)=>allFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return e.catId===cid&&dt.getMonth()===((eMonthIdx+7)%12);}).reduce((a,e)=>a+Number(e.amount),0);
+    const disabledThisMonth=d.monthDisabled?.[mk]||[];
+    const plannedTotal=moTotal({...d.years[ay].monthly, ...(d.years[ay].monthlyOverrides?.[MONTH_NAMES[eMonthIdx]]||{}), subs:subsMo});
+    const unbudgetedSpend=cats.filter(c=>!c.locked&&!c.autoCalc&&disabledThisMonth.includes(c.id)).reduce((a,c)=>a+spentCat(c.id),0);
+    const deficit=Math.round((plannedTotal+unbudgetedSpend)-moSpendable);
+
+    if(isUnbudgeted && deficit>0){
+      if((d.surplusBank||0) >= deficit) setWeeklyNotice({type:"offer", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit});
       else setWeeklyNotice({type:"warn", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, bank:d.surplusBank||0});
-    } else if(autoAdded){
+    } else if(isUnbudgeted){
       setWeeklyNotice({type:"info", cat:catObj?.label, month:MONTH_FULL[eMonthIdx]});
+    } else if(deficit>0){
+      // even a planned category can tip the month over
+      if((d.surplusBank||0) >= deficit) setWeeklyNotice({type:"offer", cat:null, month:MONTH_FULL[eMonthIdx], deficit});
+      else setWeeklyNotice({type:"warn", cat:null, month:MONTH_FULL[eMonthIdx], deficit, bank:d.surplusBank||0});
     }
   };
-
   const delEntry = (eid, isArchived) => {
     let d = JSON.parse(JSON.stringify(data));
     if(isArchived){
@@ -883,11 +904,11 @@ function App() {
       <style>{`@keyframes wcmpulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
       {/* Modals */}
       {renewDlg && <RenewalDialog sub={renewDlg} onClose={()=>setRenewDlg(null)} onConfirm={handleRenewal}/>}
-      {weeklyNotice && weeklyNotice.type==="warn" && <Modal title="Over budget" onClose={()=>setWeeklyNotice(null)} width={360}>
+      {weeklyNotice && weeklyNotice.type==="warn" && <Modal title={weeklyNotice.month+" is over budget"} onClose={()=>setWeeklyNotice(null)} width={360}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:8,lineHeight:1.6}}>
-          <strong>{weeklyNotice.cat}</strong> was added to {weeklyNotice.month}, pushing that month <strong style={{color:C.red}}>{fmt(weeklyNotice.deficit)}</strong> over your spendable income.
+          {weeklyNotice.month} spending is now <strong style={{color:C.red}}>{fmt(weeklyNotice.deficit)}</strong> over your monthly income{weeklyNotice.cat?<>, after logging <strong>{weeklyNotice.cat}</strong></>:""}.
         </div>
-        <div style={{fontSize:12,color:C.gray,marginBottom:16}}>Your surplus bank ({fmt(weeklyNotice.bank)}) can't fully cover this. Consider reducing another category this month or adjusting the amount.</div>
+        <div style={{fontSize:12,color:C.gray,marginBottom:16}}>Your surplus bank ({fmt(weeklyNotice.bank)}) can't fully cover the gap. Consider trimming another category this month, or it'll draw down future savings.</div>
         <button onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.red,color:"#fff",cursor:"pointer"}}>Got it</button>
       </Modal>}
       {confirmYearRemove!==null && <Modal title="Remove year" onClose={()=>setConfirmYearRemove(null)} width={350}>
@@ -1059,6 +1080,27 @@ function App() {
               <span style={{color:moSpend>moSpendable?C.red:C.text}}>{fmt(moSpend)}/mo</span>
             </div>
             {subsMo>0 && <div style={{fontSize:11,color:C.blue,marginTop:6}}>{subs.filter(s=>s.active!==false).length} active subscription{subs.length!==1?"s":""} totalling {fmt(subsMo)}/mo — auto-calculated</div>}
+
+            {unbudgetedCats.length>0 && <div style={{marginTop:16,paddingTop:14,borderTop:`2px dashed ${C.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.amber}}>Unbudgeted spending</span>
+                <InfoTip text={"Spending logged in "+MONTH_FULL[selMonth]+" for categories not in your plan. These show actual amounts spent. Add one to your budget to start planning for it."}/>
+              </div>
+              {unbudgetedCats.map((cat,i)=>{
+                const spent=spentInMonth(cat.id,selMonth);
+                return (
+                  <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>
+                    <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
+                    <span style={{fontSize:13,fontWeight:600,color:C.amber,minWidth:64,textAlign:"right"}}>{fmt(spent)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> spent</span></span>
+                    <button onClick={()=>promoteToBudget(cat.id)} style={{padding:"3px 10px",fontSize:11,fontWeight:600,border:`1px solid ${C.amberMid}`,borderRadius:6,background:C.amberLight,color:C.amber,cursor:"pointer",whiteSpace:"nowrap"}}>Add to budget</button>
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600,marginTop:8,color:C.amber}}>
+                <span>Unbudgeted total</span><span>{fmt(unbudgetedTotal)}/mo</span>
+              </div>
+            </div>}
           </Card>
 
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -1161,12 +1203,12 @@ function App() {
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {weeklyNotice && weeklyNotice.type==="info" && (
             <Banner type="info" onClose={()=>setWeeklyNotice(null)}>
-              <strong>{weeklyNotice.cat}</strong> was automatically added to your {weeklyNotice.month} budget. Adjust its amount in the Budget tab anytime.
+              <strong>{weeklyNotice.cat}</strong> wasn't in your {weeklyNotice.month} budget, so it's now tracked under <strong>Unbudgeted spending</strong> in the Budget tab. Tap "Add to budget" there if you want to plan for it.
             </Banner>
           )}
           {weeklyNotice && weeklyNotice.type==="offer" && (
             <div style={{padding:"12px 14px",background:C.amberLight,borderRadius:10,fontSize:13,color:C.amber,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-              <span><strong>{weeklyNotice.cat}</strong> added to {weeklyNotice.month}, putting it {fmt(weeklyNotice.deficit)} over budget. Cover from your surplus bank?</span>
+              <span>{weeklyNotice.cat?<><strong>{weeklyNotice.cat}</strong> spending puts </>:<>This puts </>}{weeklyNotice.month} {fmt(weeklyNotice.deficit)} over your income. Cover it from your surplus bank?</span>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>{withdrawFromSurplus(weeklyNotice.deficit);setWeeklyNotice(null);}} style={{padding:"5px 12px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>Cover {fmt(weeklyNotice.deficit)}</button>
                 <button onClick={()=>setWeeklyNotice(null)} style={{padding:"5px 10px",fontSize:12,border:`1px solid ${C.amberMid}`,borderRadius:6,background:"transparent",color:C.amber,cursor:"pointer"}}>Dismiss</button>
