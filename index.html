@@ -232,6 +232,7 @@ const DEFAULT_STATE = {
   monthlyRollover: {},
   weeklyRollover: {},
   surplusBank: 0,
+  coverMonths: {},
   logo: null,  // null=WCM official, 'w'=monogram, or base64 data URL
   monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
   darkMode: false,
@@ -563,6 +564,7 @@ function App() {
         if(!loaded.monthDisabled) loaded.monthDisabled={};
         if(loaded.darkMode===undefined) loaded.darkMode=false;
         if(loaded.logo===undefined) loaded.logo=null;
+        if(!loaded.coverMonths) loaded.coverMonths={};
         loaded.years.forEach((y,i)=>{if(!y.startDate)Object.assign(y,YEAR_CONFIGS[i]);});
         setData(loaded);
       }
@@ -665,15 +667,54 @@ function App() {
   const unbudgetedCats = cats.filter(c=>!c.locked && !c.autoCalc && disabledCats.includes(c.id) && spentInMonth(c.id,selMonth)>0);
   const unbudgetedTotal = unbudgetedCats.reduce((a,c)=>a+spentInMonth(c.id,selMonth),0);
 
-  const moSurplus   = moSpendable - moSpend - unbudgetedTotal;
+  const moSurplus   = moSpendable - moSpend - unbudgetedTotal;  // selected month's net
 
-  // Current year net (this academic year only)
-  const curYrNet = moSurplus * 12;
+  // Annual net: sum each month's planned budget + actual unbudgeted spend (one-time, not x12)
+  let annualPlanned = 0, annualUnbudgeted = 0;
+  MONTH_NAMES.forEach((mn, mi) => {
+    const disM = data.monthDisabled?.[ay+"-"+mn] || [];
+    cats.forEach(c => {
+      if(c.id==="subs"){ if(!disM.includes("subs")) annualPlanned += subsMo; return; }
+      if(disM.includes(c.id)){
+        if(!c.locked && !c.autoCalc) annualUnbudgeted += spentInMonth(c.id, mi);
+      } else {
+        const ov = yr.monthlyOverrides?.[mn]?.[c.id];
+        annualPlanned += (ov!==undefined ? ov : (Number(yr.monthly[c.id])||0));
+      }
+    });
+  });
+  const curYrNet = moSpendable*12 - annualPlanned - annualUnbudgeted;
 
-  // Surplus bank
-  const surplusBankBal = data.surplusBank||0;
+  // ── Surplus bank with LIVE deficit coverage (auto-reverses when entries change) ──
+  const coverMonths = data.coverMonths || {};
+  const yearSpendable = (y) => (Math.max((Number(y.grant)||0)-(Number(y.tuitionFees)||0)-(Number(y.healthIns)||0),0) + (Number(y.otherIncome)||0)*12)/12;
+  const monthOutflowFor = (yIdx, mi) => {
+    const y=data.years[yIdx]; if(!y) return 0;
+    const mn=MONTH_NAMES[mi];
+    const disM=data.monthDisabled?.[y.id+"-"+mn]||[];
+    let total=0;
+    cats.forEach(c=>{
+      if(c.id==="subs"){ if(!disM.includes("subs")) total+=subsMo; return; }
+      if(disM.includes(c.id)){ if(!c.locked&&!c.autoCalc) total+=spentInMonth(c.id,mi); }
+      else { const ov=y.monthlyOverrides?.[mn]?.[c.id]; total += (ov!==undefined?ov:(Number(y.monthly[c.id])||0)); }
+    });
+    return total;
+  };
+  const monthDeficitFor = (yIdx, mi) => Math.max(0, monthOutflowFor(yIdx,mi) - yearSpendable(data.years[yIdx]));
+  const totalCovered = Object.keys(coverMonths).filter(k=>coverMonths[k]).reduce((a,k)=>{
+    const parts=k.split("-"); const yId=Number(parts[0]); const mn=parts[1];
+    const yIdx=data.years.findIndex(y=>y.id===yId); if(yIdx<0) return a;
+    return a + monthDeficitFor(yIdx, MONTH_NAMES.indexOf(mn));
+  }, 0);
+  const surplusBankRaw = data.surplusBank||0;
+  const surplusBankBal = Math.max(0, surplusBankRaw - totalCovered);
+  const thisMonthDeficit = Math.max(0, moSpend + unbudgetedTotal - moSpendable);
+  const thisMonthCovered = !!coverMonths[ay+"-"+MONTH_NAMES[selMonth]];
+
   const depositToSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=(d.surplusBank||0)+Number(amt);upd(d);setSurplusAmt("");setShowSurplus(false);};
   const withdrawFromSurplus = (amt) => {const d=JSON.parse(JSON.stringify(data));d.surplusBank=Math.max(0,(d.surplusBank||0)-Number(amt));upd(d);setSurplusAmt("");setShowSurplus(false);};
+  const coverDeficitMonth = (mi) => {const d=JSON.parse(JSON.stringify(data));if(!d.coverMonths)d.coverMonths={};d.coverMonths[ay+"-"+MONTH_NAMES[mi]]=true;upd(d);};
+  const uncoverDeficitMonth = (mi) => {const d=JSON.parse(JSON.stringify(data));if(d.coverMonths)delete d.coverMonths[ay+"-"+MONTH_NAMES[mi]];upd(d);};
 
 
   // 5-yr
@@ -794,15 +835,15 @@ function App() {
     const unbudgetedSpend=cats.filter(c=>!c.locked&&!c.autoCalc&&disabledThisMonth.includes(c.id)).reduce((a,c)=>a+spentCat(c.id),0);
     const deficit=Math.round((plannedTotal+unbudgetedSpend)-moSpendable);
 
+    const availBank = Math.max(0,(d.surplusBank||0));
     if(isUnbudgeted && deficit>0){
-      if((d.surplusBank||0) >= deficit) setWeeklyNotice({type:"offer", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit});
-      else setWeeklyNotice({type:"warn", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, bank:d.surplusBank||0});
+      if(availBank >= deficit) setWeeklyNotice({type:"offer", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx});
+      else setWeeklyNotice({type:"warn", cat:catObj?.label, month:MONTH_FULL[eMonthIdx], deficit, bank:availBank});
     } else if(isUnbudgeted){
       setWeeklyNotice({type:"info", cat:catObj?.label, month:MONTH_FULL[eMonthIdx]});
     } else if(deficit>0){
-      // even a planned category can tip the month over
-      if((d.surplusBank||0) >= deficit) setWeeklyNotice({type:"offer", cat:null, month:MONTH_FULL[eMonthIdx], deficit});
-      else setWeeklyNotice({type:"warn", cat:null, month:MONTH_FULL[eMonthIdx], deficit, bank:d.surplusBank||0});
+      if(availBank >= deficit) setWeeklyNotice({type:"offer", cat:null, month:MONTH_FULL[eMonthIdx], deficit, monthIdx:eMonthIdx});
+      else setWeeklyNotice({type:"warn", cat:null, month:MONTH_FULL[eMonthIdx], deficit, bank:availBank});
     }
   };
   const delEntry = (eid, isArchived) => {
@@ -1128,15 +1169,21 @@ function App() {
                   <button onClick={()=>{depositToSurplus(moSurplus);setSurplusSaved(true);}} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.green,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Save to surplus</button>
                 </div>
               )}
-              {moSurplus<0 && surplusBankBal>0 && !surplusSaved && (
-                <div style={{marginTop:10,padding:"10px 12px",background:C.amberLight,borderRadius:8,fontSize:12,color:C.amber,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <span>{`${fmt(Math.abs(moSurplus))}/mo over budget. Cover it from your surplus bank?`}</span>
-                  <button onClick={()=>{withdrawFromSurplus(Math.min(Math.abs(moSurplus),surplusBankBal));setSurplusSaved(true);}} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Cover deficit</button>
+              {thisMonthDeficit>0 && thisMonthCovered && (
+                <div style={{marginTop:10,padding:"10px 12px",background:C.tealLight,borderRadius:8,fontSize:12,color:C.teal,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <span>{`${fmt(thisMonthDeficit)} deficit covered from your surplus bank.`}</span>
+                  <button onClick={()=>uncoverDeficitMonth(selMonth)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:`1px solid ${C.tealMid}`,borderRadius:6,background:"transparent",color:C.teal,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Undo</button>
                 </div>
               )}
-              {moSurplus<0 && surplusBankBal<=0 && (
+              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal>=thisMonthDeficit && (
+                <div style={{marginTop:10,padding:"10px 12px",background:C.amberLight,borderRadius:8,fontSize:12,color:C.amber,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <span>{`${fmt(thisMonthDeficit)} over budget this month. Cover it from your surplus bank?`}</span>
+                  <button onClick={()=>coverDeficitMonth(selMonth)} style={{padding:"4px 12px",fontSize:11,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Cover deficit</button>
+                </div>
+              )}
+              {thisMonthDeficit>0 && !thisMonthCovered && surplusBankBal<thisMonthDeficit && (
                 <div style={{marginTop:10,padding:"10px 12px",background:C.redLight,borderRadius:8,fontSize:12,color:C.red,fontWeight:500}}>
-                  {`${fmt(Math.abs(moSurplus))}/mo over budget and surplus bank is empty. Review discretionary spending.`}
+                  {`${fmt(thisMonthDeficit)} over budget this month — more than your surplus bank (${fmt(surplusBankBal)}) can cover. Consider trimming a category.`}
                 </div>
               )}
             </Card>
@@ -1176,6 +1223,7 @@ function App() {
               </div>
               <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:6}}>
                 <div style={{fontSize:26,fontWeight:700,color:C.teal}}>{fmt(surplusBankBal)}</div>
+                {totalCovered>0 && <span style={{fontSize:11,color:C.amber}}>{fmt(totalCovered)} covering deficits</span>}
               </div>
               <div style={{fontSize:11,color:C.gray}}>Surplus auto-deposits when you save. If weekly spending exceeds budget, you'll be notified and funds are drawn automatically.</div>
               {surplusBankBal>0 && surplusBankBal>moSpendable*3 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:6,fontSize:11,color:C.green}}>You've built 3+ months of runway. Consider a high-yield savings account for long-term growth.</div>}
@@ -1210,7 +1258,7 @@ function App() {
             <div style={{padding:"12px 14px",background:C.amberLight,borderRadius:10,fontSize:13,color:C.amber,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
               <span>{weeklyNotice.cat?<><strong>{weeklyNotice.cat}</strong> spending puts </>:<>This puts </>}{weeklyNotice.month} {fmt(weeklyNotice.deficit)} over your income. Cover it from your surplus bank?</span>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
-                <button onClick={()=>{withdrawFromSurplus(weeklyNotice.deficit);setWeeklyNotice(null);}} style={{padding:"5px 12px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>Cover {fmt(weeklyNotice.deficit)}</button>
+                <button onClick={()=>{coverDeficitMonth(weeklyNotice.monthIdx);setWeeklyNotice(null);}} style={{padding:"5px 12px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C.amber,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>Cover {fmt(weeklyNotice.deficit)}</button>
                 <button onClick={()=>setWeeklyNotice(null)} style={{padding:"5px 10px",fontSize:12,border:`1px solid ${C.amberMid}`,borderRadius:6,background:"transparent",color:C.amber,cursor:"pointer"}}>Dismiss</button>
               </div>
             </div>
