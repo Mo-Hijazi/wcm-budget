@@ -1241,7 +1241,7 @@ function App() {
               </div>
               <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:6}}>
                 <div style={{fontSize:26,fontWeight:700,color:C.teal}}>{fmt(surplusBankBal)}</div>
-                {totalCovered>0 && <span style={{fontSize:11,color:C.amber}}>{fmt(totalCovered)} covering deficits</span>}
+                {bankUsed>0 && <span style={{fontSize:11,color:C.amber}}>{fmt(bankUsed)} covering deficits</span>}
               </div>
               <div style={{fontSize:11,color:C.gray}}>Surplus auto-deposits when you save. If weekly spending exceeds budget, you'll be notified and funds are drawn automatically.</div>
               {surplusBankBal>0 && surplusBankBal>moSpendable*3 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:6,fontSize:11,color:C.green}}>You've built 3+ months of runway. Consider a high-yield savings account for long-term growth.</div>}
