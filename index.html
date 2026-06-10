@@ -928,6 +928,19 @@ function App() {
     return()=>document.removeEventListener('visibilitychange',onViz);
   },[ready]);
 
+  // Re-sync immediately when internet comes back
+  const saveRef = React.useRef(save);
+  useEffect(()=>{ saveRef.current=save; },[save]);
+  useEffect(()=>{
+    const onOnline=()=>{
+      if(!dataRef.current) return;
+      setSyncStatus("syncing");
+      saveRef.current(dataRef.current);
+    };
+    window.addEventListener('online',onOnline);
+    return()=>window.removeEventListener('online',onOnline);
+  },[]);
+
   const upd = d => { setData(d); save(d); };
   const dismiss = k => setDismissed(p=>({...p,[k]:true}));
 
