@@ -908,8 +908,43 @@ function App() {
       setWeeklyNotice({type:"info", cat:catObj?.label, month:MONTH_FULL[eMonthIdx]});
     }
   };
+  // Remove a weekly entry by id from both current week and archive (mutates d)
+  const removeWeeklyEntry = (d, eid) => {
+    d.currentWeekEntries=(d.currentWeekEntries||[]).filter(e=>e.id!==eid);
+    d.weeklyArchive=(d.weeklyArchive||[]).map(a=>{
+      const ents=a.entries.filter(e=>e.id!==eid);
+      return {...a,entries:ents,total:ents.reduce((s,e)=>s+Number(e.amount),0)};
+    });
+  };
+  // Reverse all side-effects of a deposit: linked weekly entry, goal balance,
+  // and the budget override we auto-added (only if still untouched). Mutates d.
+  const reverseDeposit = (d, slEntry) => {
+    if(!slEntry) return;
+    // Remove the linked weekly entry
+    if(slEntry.weeklyEntryId) removeWeeklyEntry(d, slEntry.weeklyEntryId);
+    // Decrement the goal balance
+    const inStep=(d.stepGoals||[]).findIndex(x=>x.id===slEntry.goalId);
+    const inCustom=(d.savingsGoals||[]).findIndex(x=>x.id===slEntry.goalId);
+    if(inStep>=0) d.stepGoals[inStep].saved=Math.max(0,(d.stepGoals[inStep].saved||0)-slEntry.amount);
+    else if(inCustom>=0) d.savingsGoals[inCustom].saved=Math.max(0,(d.savingsGoals[inCustom].saved||0)-slEntry.amount);
+    // Revert the auto-added budget override, but only if it still equals what we set
+    const ba=slEntry.budgetAdded;
+    if(ba && d.years[ba.ay]?.monthlyOverrides?.[ba.monthName]?.[ba.catId]===ba.amount){
+      delete d.years[ba.ay].monthlyOverrides[ba.monthName][ba.catId];
+    }
+    // Remove the savings log entry itself
+    d.savingsLog=(d.savingsLog||[]).filter(e=>e.id!==slEntry.id);
+  };
+
   const delEntry = (eid, isArchived) => {
     let d = JSON.parse(JSON.stringify(data));
+    // If this weekly entry came from a savings deposit, reverse the whole deposit
+    const allFlat=[...(d.currentWeekEntries||[]),...((d.weeklyArchive||[]).flatMap(a=>a.entries||[]))];
+    const we=allFlat.find(e=>e.id===eid);
+    if(we?.depositId){
+      const slEntry=(d.savingsLog||[]).find(s=>s.id===we.depositId);
+      if(slEntry){ reverseDeposit(d, slEntry); upd(d); return; }
+    }
     if(isArchived){
       d.weeklyArchive=d.weeklyArchive.map(a=>{
         const ents=a.entries.filter(e=>e.id!==eid);
@@ -1097,10 +1132,11 @@ function App() {
                 const inCustom=d.savingsGoals.findIndex(x=>x.id===savingsDepositGoal);
                 if(inStep>=0) d.stepGoals[inStep].saved=Math.max(0,(d.stepGoals[inStep].saved||0)+amt);
                 else if(inCustom>=0) d.savingsGoals[inCustom].saved=Math.max(0,(d.savingsGoals[inCustom].saved||0)+amt);
-                if(!d.savingsLog) d.savingsLog=[];
-                d.savingsLog.push({id:"sl_"+Date.now(),goalId:savingsDepositGoal,amount:amt,date:savingsDepositDate,note:savingsDepositNote});
 
-                // Wire deposit into weekly + budget
+                // Wire deposit into weekly + budget, with a bidirectional link
+                const stamp=Date.now();
+                const slId="sl_"+stamp;
+                const weeklyEntryId="e_"+stamp;
                 const catId = inStep>=0 ? "exams" : "savings";
                 const depDate = new Date(savingsDepositDate+"T12:00:00");
                 const depAcadMonth = (depDate.getMonth()-7+12)%12;
@@ -1113,7 +1149,7 @@ function App() {
                 const depAy = depYrIdx>=0 ? depYrIdx : ay;
                 const depYr = d.years[depAy];
                 // Always add a weekly entry so deposit appears in Budget/Weekly actuals
-                const entry={id:"e_"+Date.now(),catId,amount:amt,note:(savingsDepositNote||"Savings deposit"),date:savingsDepositDate};
+                const entry={id:weeklyEntryId,catId,amount:amt,note:(savingsDepositNote||"Savings deposit"),date:savingsDepositDate,depositId:slId};
                 if(!d.currentWeekEntries) d.currentWeekEntries=[];
                 if(!d.weeklyArchive) d.weeklyArchive=[];
                 const entryWeek=getMonday(savingsDepositDate);
@@ -1131,12 +1167,17 @@ function App() {
                 const existingBudget = depYr.monthlyOverrides[depMonthName][catId] !== undefined
                   ? depYr.monthlyOverrides[depMonthName][catId]
                   : (Number(depYr.monthly[catId])||0);
+                let budgetAdded=null;
                 if(!existingBudget) {
                   depYr.monthlyOverrides[depMonthName][catId] = amt;
+                  budgetAdded={ay:depAy,monthName:depMonthName,catId,amount:amt};
                   // Remove from disabled cats for that month if present
                   const mk=depAy+"-"+depMonthName;
                   if(d.monthDisabled?.[mk]) d.monthDisabled[mk]=d.monthDisabled[mk].filter(c=>c!==catId);
                 }
+
+                if(!d.savingsLog) d.savingsLog=[];
+                d.savingsLog.push({id:slId,goalId:savingsDepositGoal,amount:amt,date:savingsDepositDate,note:savingsDepositNote,weeklyEntryId,budgetAdded});
 
                 upd(d);
                 setSavingsDepositGoal(null);setSavingsDepositAmt("");setSavingsDepositNote("");setSavingsDepositDate(todayStr());
@@ -1777,11 +1818,8 @@ function App() {
                       <span style={{fontWeight:700,color:C.teal}}>{fmt(entry.amount)}</span>
                       <button onClick={()=>{
                         const d=JSON.parse(JSON.stringify(data));
-                        const inStep=d.stepGoals.findIndex(x=>x.id===entry.goalId);
-                        const inCustom=d.savingsGoals.findIndex(x=>x.id===entry.goalId);
-                        if(inStep>=0) d.stepGoals[inStep].saved=Math.max(0,(d.stepGoals[inStep].saved||0)-entry.amount);
-                        else if(inCustom>=0) d.savingsGoals[inCustom].saved=Math.max(0,(d.savingsGoals[inCustom].saved||0)-entry.amount);
-                        d.savingsLog=d.savingsLog.filter((_,j)=>j!==i);
+                        const slEntry=(d.savingsLog||[]).find(s=>s.id===entry.id);
+                        reverseDeposit(d, slEntry);
                         upd(d);
                       }} style={{width:26,height:26,borderRadius:6,background:C.bg,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
                     </div>
