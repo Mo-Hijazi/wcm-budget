@@ -2243,15 +2243,22 @@ function App() {
               const pEnd   = Math.max(pieMonthStart, pieMonthEnd??pieMonthStart);
               const isRange = pieMonthEnd !== null;
               const pieLabel = isRange ? `${MONTH_NAMES[pStart]} – ${MONTH_NAMES[pEnd]}` : MONTH_NAMES[pStart];
-              // Aggregate actual spending over selected range
-              const pieActual = {};
+              // Aggregate budgeted amounts over selected range
+              const pieYr = data.years.find(y=>y.id===ay)||data.years[0];
+              const getBudgetVal = (catId, mIdx) => {
+                if(catId==="subs") return subsMo;
+                const mk = MONTH_NAMES[mIdx];
+                const ov = pieYr.monthlyOverrides?.[mk]?.[catId];
+                return ov !== undefined ? ov : (Number(pieYr.monthly[catId])||0);
+              };
+              const pieBudget = {};
               cats.forEach(c => {
                 let tot = 0;
-                for(let m=pStart; m<=pEnd; m++) tot += spentInMonth(c.id, m);
-                pieActual[c.id] = tot;
+                for(let m=pStart; m<=pEnd; m++) tot += getBudgetVal(c.id, m);
+                pieBudget[c.id] = tot;
               });
-              const pieTotal = Object.values(pieActual).reduce((a,v)=>a+v, 0);
-              const pieSeries = cats.map((c,i)=>({name:c.label,value:Math.round(pieActual[c.id]||0),color:CHART_COLORS[i%CHART_COLORS.length]})).filter(d=>d.value>0);
+              const pieTotal = Object.values(pieBudget).reduce((a,v)=>a+v, 0);
+              const pieSeries = cats.map((c,i)=>({name:c.label,value:Math.round(pieBudget[c.id]||0),color:CHART_COLORS[i%CHART_COLORS.length]})).filter(d=>d.value>0);
               return (
                 <Card>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -2304,7 +2311,7 @@ function App() {
                         </ResponsiveContainer>
                         <div style={{paddingTop:8}}>
                           {cats.map((cat,i)=>{
-                            const amt=Math.round(pieActual[cat.id]||0);
+                            const amt=Math.round(pieBudget[cat.id]||0);
                             const pct=pieTotal>0?Math.round(amt/pieTotal*100):0;
                             if(amt===0) return null;
                             return <div key={cat.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
