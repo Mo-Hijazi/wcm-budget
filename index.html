@@ -36,13 +36,21 @@ const GIST_ID_KEY = "wcm_gist_id";
 const gistFetch = async () => {
   const id = localStorage.getItem(GIST_ID_KEY);
   try {
-    // No local ID → discovery mode: server scans gist list to find WCM gist
-    const url = id ? `/api/sync?id=${id}` : `/api/sync`;
-    const r = await fetch(url);
+    if(id) {
+      // Try the cached ID first
+      const r = await fetch(`/api/sync?id=${id}`);
+      if(r.ok) {
+        const j = await r.json();
+        if(j.content) return j.content;
+      }
+      // Cached ID failed — clear it and fall through to discovery
+      localStorage.removeItem(GIST_ID_KEY);
+    }
+    // Discovery mode: server scans gist list to find WCM gist
+    const r = await fetch(`/api/sync`);
     if(!r.ok) return null;
     const j = await r.json();
-    // Store discovered ID for future loads on this device
-    if(!id && j.id) localStorage.setItem(GIST_ID_KEY, j.id);
+    if(j.id) localStorage.setItem(GIST_ID_KEY, j.id);
     return j.content || null;
   } catch { return null; }
 };
