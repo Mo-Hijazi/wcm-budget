@@ -2270,6 +2270,18 @@ function App() {
 const root=ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(App));
 </script>
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});</script>
+<script>
+if('serviceWorker' in navigator){
+  // Reload once when a new service worker takes control, so fresh code lands without manual cache clearing
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(reloaded)return; reloaded=true; window.location.reload();
+  });
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    reg.update();                       // force an update check on every load
+    setInterval(()=>reg.update(),60*60*1000); // and hourly while open
+  }).catch(()=>{});
+}
+</script>
 </body>
 </html>
