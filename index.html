@@ -69,6 +69,139 @@ const gistWrite = async (content) => {
     return true;
   } catch { return false; }
 };
+
+// ── 3-way merge engine ─────────────────────────────────────────────────────────
+const SYNC_BASE_KEY = "wcm_v8_base";
+
+function diffStates(base, cur) {
+  const ch = {}, js = JSON.stringify;
+  for (const k of ['darkMode','logo','surplusBank']) {
+    if (js(base[k]) !== js(cur[k])) ch[k] = {b:base[k], c:cur[k]};
+  }
+  for (const k of ['monthlyRollover','monthlyDeposits','monthDisabled','coverMonths','weeklyRollover']) {
+    const bk=base[k]||{}, ck=cur[k]||{};
+    for (const sk of new Set([...Object.keys(bk),...Object.keys(ck)]))
+      if (js(bk[sk])!==js(ck[sk])) ch[`${k}.${sk}`]={b:bk[sk],c:ck[sk]};
+  }
+  const ylen=Math.max((base.years||[]).length,(cur.years||[]).length);
+  for (let i=0;i<ylen;i++) {
+    const by=(base.years||[])[i]||{}, cy=(cur.years||[])[i]||{};
+    for (const f of ['grant','tuitionFees','healthIns','otherIncome','housing','housingNote','wcmLivingAllowance','notes','startDate','endDate'])
+      if (js(by[f])!==js(cy[f])) ch[`years[${i}].${f}`]={b:by[f],c:cy[f]};
+    const bm=by.monthly||{}, cm=cy.monthly||{};
+    for (const c of new Set([...Object.keys(bm),...Object.keys(cm)]))
+      if (js(bm[c])!==js(cm[c])) ch[`years[${i}].monthly.${c}`]={b:bm[c],c:cm[c]};
+    const bo=by.monthlyOverrides||{}, co=cy.monthlyOverrides||{};
+    for (const mn of new Set([...Object.keys(bo),...Object.keys(co)])) {
+      const bmo=bo[mn]||{}, cmo=co[mn]||{};
+      for (const c of new Set([...Object.keys(bmo),...Object.keys(cmo)]))
+        if (js(bmo[c])!==js(cmo[c])) ch[`years[${i}].monthlyOverrides.${mn}.${c}`]={b:bmo[c],c:cmo[c]};
+    }
+  }
+  for (const k of ['categories','subscriptions','stepGoals','savingsGoals','savingsLog','currentWeekEntries']) {
+    const ba=base[k]||[], ca=cur[k]||[];
+    const bById=Object.fromEntries(ba.map(x=>[x.id,x])), cById=Object.fromEntries(ca.map(x=>[x.id,x]));
+    for (const id of new Set([...ba.map(x=>x.id),...ca.map(x=>x.id)]))
+      if (js(bById[id])!==js(cById[id])) ch[`${k}[${id}]`]={b:bById[id],c:cById[id]};
+  }
+  const bwa=base.weeklyArchive||[], cwa=cur.weeklyArchive||[];
+  const bwaMap=Object.fromEntries(bwa.map(w=>[w.weekStart,w])), cwaMap=Object.fromEntries(cwa.map(w=>[w.weekStart,w]));
+  for (const ws of new Set([...bwa.map(w=>w.weekStart),...cwa.map(w=>w.weekStart)])) {
+    const bw=bwaMap[ws], cw=cwaMap[ws];
+    if (!bw||!cw) { ch[`weeklyArchive[${ws}]`]={b:bw,c:cw}; continue; }
+    const beMap=Object.fromEntries((bw.entries||[]).map(e=>[e.id,e])), ceMap=Object.fromEntries((cw.entries||[]).map(e=>[e.id,e]));
+    for (const eid of new Set([...Object.keys(beMap),...Object.keys(ceMap)]))
+      if (js(beMap[eid])!==js(ceMap[eid])) ch[`weeklyArchive[${ws}].entries[${eid}]`]={b:beMap[eid],c:ceMap[eid]};
+  }
+  return ch;
+}
+
+function findConflicts(localCh, serverCh) {
+  const conflicts=[], mergeLocal={}, mergeServer={};
+  for (const k of Object.keys(localCh)) {
+    if (serverCh[k]) conflicts.push({key:k, local:localCh[k].c, server:serverCh[k].c});
+    else mergeLocal[k]=localCh[k];
+  }
+  for (const k of Object.keys(serverCh)) if (!localCh[k]) mergeServer[k]=serverCh[k];
+  return {conflicts, mergeLocal, mergeServer};
+}
+
+function applyChanges(state, changes) {
+  const s=JSON.parse(JSON.stringify(state));
+  for (const [key, ch] of Object.entries(changes)) {
+    const val=ch.c;
+    let m;
+    m=key.match(/^years\[(\d+)\]\.(.+)$/);
+    if (m) {
+      const idx=+m[1], rest=m[2];
+      if (!s.years[idx]) continue;
+      if (rest.startsWith('monthly.')) {
+        const cid=rest.slice(8); s.years[idx].monthly=s.years[idx].monthly||{};
+        if (val==null) delete s.years[idx].monthly[cid]; else s.years[idx].monthly[cid]=val;
+      } else if (rest.startsWith('monthlyOverrides.')) {
+        const [mn,cid]=rest.slice(17).split('.');
+        s.years[idx].monthlyOverrides=s.years[idx].monthlyOverrides||{};
+        s.years[idx].monthlyOverrides[mn]=s.years[idx].monthlyOverrides[mn]||{};
+        if (val==null) delete s.years[idx].monthlyOverrides[mn][cid]; else s.years[idx].monthlyOverrides[mn][cid]=val;
+      } else { s.years[idx][rest]=val; }
+      continue;
+    }
+    m=key.match(/^(monthlyRollover|monthlyDeposits|monthDisabled|coverMonths|weeklyRollover)\.(.+)$/);
+    if (m) { s[m[1]]=s[m[1]]||{}; if (val==null) delete s[m[1]][m[2]]; else s[m[1]][m[2]]=val; continue; }
+    m=key.match(/^(categories|subscriptions|stepGoals|savingsGoals|savingsLog|currentWeekEntries)\[(.+)\]$/);
+    if (m) {
+      const [,arrKey,id]=m; s[arrKey]=s[arrKey]||[];
+      const idx=s[arrKey].findIndex(x=>x.id===id);
+      if (val==null) { if (idx>=0) s[arrKey].splice(idx,1); }
+      else { if (idx>=0) s[arrKey][idx]=val; else s[arrKey].push(val); }
+      continue;
+    }
+    m=key.match(/^weeklyArchive\[(.+)\]\.entries\[(.+)\]$/);
+    if (m) {
+      const wi=s.weeklyArchive.findIndex(w=>w.weekStart===m[1]); if (wi<0) continue;
+      const ei=s.weeklyArchive[wi].entries.findIndex(e=>e.id===m[2]);
+      if (val==null) { if (ei>=0) s.weeklyArchive[wi].entries.splice(ei,1); }
+      else { if (ei>=0) s.weeklyArchive[wi].entries[ei]=val; else s.weeklyArchive[wi].entries.push(val); }
+      continue;
+    }
+    m=key.match(/^weeklyArchive\[(.+)\]$/);
+    if (m) {
+      const wi=s.weeklyArchive.findIndex(w=>w.weekStart===m[1]);
+      if (val==null) { if (wi>=0) s.weeklyArchive.splice(wi,1); }
+      else { if (wi>=0) s.weeklyArchive[wi]=val; else s.weeklyArchive.push(val); }
+      continue;
+    }
+    if (val==null) delete s[key]; else s[key]=val;
+  }
+  return s;
+}
+
+const MONEY_KEYS=['monthly','budget','housing','amount','grant','tuition','health','income','allowance','target','saved','surplusBank','fee'];
+function fmtConflictVal(key, val, data) {
+  if (val==null) return '(removed)';
+  if (typeof val==='boolean') return val?'On':'Off';
+  if (typeof val==='number') return MONEY_KEYS.some(mk=>key.toLowerCase().includes(mk))?`$${val.toLocaleString()}`:String(val);
+  if (typeof val==='object') {
+    if (val.name) return val.name+(val.amount?` — $${val.amount}`:'');
+    if (val.label) return val.label+(val.targetAmount?` — $${val.targetAmount}`:'');
+    if (val.catId&&val.amount) { const cat=(data?.categories||[]).find(c=>c.id===val.catId); return `${cat?.label||val.catId}: $${val.amount}`; }
+    return JSON.stringify(val);
+  }
+  return String(val);
+}
+function conflictLabel(key, data) {
+  const cats=data?.categories||[], catLabel=id=>cats.find(c=>c.id===id)?.label||id;
+  const YN=['Year 1','Year 2','Year 3','Year 4','Extended'];
+  let m;
+  m=key.match(/^years\[(\d+)\]\.monthly\.(.+)$/);         if (m) return `${YN[+m[1]]||'Year '+(+m[1]+1)} — ${catLabel(m[2])} budget`;
+  m=key.match(/^years\[(\d+)\]\.monthlyOverrides\.(\w+)\.(.+)$/); if (m) return `${YN[+m[1]]||'Year '+(+m[1]+1)} — ${catLabel(m[3])} override (${m[2]})`;
+  m=key.match(/^years\[(\d+)\]\.(.+)$/);                  if (m) return `${YN[+m[1]]||'Year '+(+m[1]+1)} — ${({grant:'Grant',tuitionFees:'Tuition',healthIns:'Health ins.',otherIncome:'Other income',housing:'Housing',housingNote:'Housing note',notes:'Notes',startDate:'Start date',endDate:'End date'})[m[2]]||m[2]}`;
+  m=key.match(/^stepGoals\[(.+)\]$/);                      if (m) { const g=(data?.stepGoals||[]).find(g=>g.id===m[1]); return `Step goal: ${g?.label||m[1]}`; }
+  m=key.match(/^savingsGoals\[(.+)\]$/);                   if (m) { const g=(data?.savingsGoals||[]).find(g=>g.id===m[1]); return `Savings goal: ${g?.label||m[1]}`; }
+  m=key.match(/^subscriptions\[(.+)\]$/);                  if (m) { const s=(data?.subscriptions||[]).find(s=>s.id===m[1]); return `Subscription: ${s?.name||m[1]}`; }
+  m=key.match(/^categories\[(.+)\]$/);                     if (m) return `Category: ${catLabel(m[1])}`;
+  return ({darkMode:'Dark mode',logo:'App logo',surplusBank:'Surplus bank'})[key]||key;
+}
 (function(){setInterval(()=>{const now=new Date();if(now.getDay()===0&&now.getHours()===23&&now.getMinutes()===59)window._triggerArchive&&window._triggerArchive()},60000)})();
 
 const { useState, useEffect, useCallback } = React;
@@ -550,6 +683,46 @@ function WeekSelectorModal({archives, currentWeekStart, currentWeekEnd, selected
   );
 }
 
+// ── Conflict resolution modal ─────────────────────────────────────────────────
+function ConflictModal({pending, data, onResolve}) {
+  const [choices, setChoices] = React.useState(()=>Object.fromEntries(pending.conflicts.map(c=>[c.key,'local'])));
+  const choose=(key,side)=>setChoices(p=>({...p,[key]:side}));
+  const resolve=()=>{
+    const resolvedChanges=Object.fromEntries(pending.conflicts.map(c=>[c.key,{c: choices[c.key]==='local'?c.local:c.server}]));
+    onResolve({...pending, resolvedChanges});
+  };
+  const autoCount=Object.keys(pending.mergeLocal).length+Object.keys(pending.mergeServer).length;
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:C.white,borderRadius:16,padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>Sync conflict</div>
+        <div style={{fontSize:13,color:C.textMid,marginBottom:18}}>
+          The same {pending.conflicts.length===1?'item was':pending.conflicts.length+' items were'} changed on two devices. Pick which version to keep.
+        </div>
+        {pending.conflicts.map(c=>(
+          <div key={c.key} style={{marginBottom:12,padding:12,borderRadius:10,background:C.bgDark,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:10}}>{conflictLabel(c.key,data)}</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {[['local','This device',c.local],['server','Other device',c.server]].map(([side,label,val])=>(
+                <button key={side} onClick={()=>choose(c.key,side)} style={{padding:'10px 8px',borderRadius:8,border:`2px solid ${choices[c.key]===side?C.teal:C.border}`,background:choices[c.key]===side?C.tealLight:'transparent',cursor:'pointer',textAlign:'left',transition:'all .15s'}}>
+                  <div style={{fontSize:10,color:C.gray,fontWeight:600,marginBottom:3,textTransform:'uppercase'}}>{label}</div>
+                  <div style={{fontSize:13,color:C.text,fontWeight:500,wordBreak:'break-word'}}>{fmtConflictVal(c.key,val,data)}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {autoCount>0&&<div style={{fontSize:11,color:C.gray,marginBottom:14,padding:'8px 12px',borderRadius:8,background:C.bgDark,border:`1px solid ${C.border}`}}>
+          {autoCount} other change{autoCount>1?'s':''} on different items will be merged automatically — no action needed.
+        </div>}
+        <button onClick={resolve} style={{width:'100%',padding:'12px',fontSize:14,fontWeight:700,border:'none',borderRadius:10,background:C.teal,color:'#fff',cursor:'pointer',marginTop:4}}>
+          Apply &amp; sync
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App() {
   const [tab, setTab]           = useState("budget");
@@ -558,8 +731,12 @@ function App() {
   const [ready, setReady]       = useState(false);
   const [flash, setFlash]       = useState(false);
   const [dismissed, setDismissed] = useState({});
-  const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"offline"
+  const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"offline"|"conflict"
+  const [pendingConflict, setPendingConflict] = useState(null);
   const gistTimerRef = React.useRef(null);
+  const dataRef = React.useRef(null);
+  const lastFocusRef = React.useRef(0);
+  useEffect(()=>{ dataRef.current=data; },[data]);
 
   // Subscription form
   const [subName, setSubName]   = useState("");
@@ -618,7 +795,8 @@ function App() {
         const gistContent = await gistFetch();
         if(gistContent){
           raw = gistContent;
-          // Keep localStorage in sync as offline cache
+          // Store as the agreed-upon base for 3-way merge
+          localStorage.setItem(SYNC_BASE_KEY, raw);
           await window.storage.set("wcm_v8", raw);
           setSyncStatus("synced");
         } else {
@@ -668,16 +846,87 @@ function App() {
   },[ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useCallback(async d => {
-    const json = JSON.stringify(d);
+    const ts = Date.now();
+    const json = JSON.stringify({...d, _savedAt: ts});
     try{await window.storage.set("wcm_v8",json);setFlash(true);setTimeout(()=>setFlash(false),1400);}catch{}
-    // Debounced Gist sync — waits 2s after last change before writing
+    // If a conflict is awaiting resolution, don't overwrite cloud until resolved
+    if(syncStatus==="conflict") return;
     clearTimeout(gistTimerRef.current);
     setSyncStatus("syncing");
     gistTimerRef.current = setTimeout(async()=>{
-      const ok = await gistWrite(json);
-      setSyncStatus(ok ? "synced" : "offline");
+      const baseRaw = localStorage.getItem(SYNC_BASE_KEY);
+      const base = baseRaw ? JSON.parse(baseRaw) : null;
+      if(base){
+        const serverContent = await gistFetch();
+        if(serverContent){
+          const server = JSON.parse(serverContent);
+          if(server._savedAt && base._savedAt && server._savedAt > base._savedAt){
+            const strip = o=>{const c={...o}; delete c._savedAt; return c;};
+            const baseClean=strip(base), serverClean=strip(server);
+            const localCh=diffStates(baseClean,d), serverCh=diffStates(baseClean,serverClean);
+            const {conflicts,mergeLocal,mergeServer}=findConflicts(localCh,serverCh);
+            if(conflicts.length>0){
+              setPendingConflict({conflicts,base:baseClean,server:serverClean,local:d,mergeLocal,mergeServer});
+              setSyncStatus("conflict");
+              return;
+            }
+            // No conflicts — auto-merge: start from server, apply local-only changes
+            let merged=applyChanges(serverClean,mergeLocal);
+            const mergedJson=JSON.stringify({...merged,_savedAt:Date.now()});
+            const ok=await gistWrite(mergedJson);
+            if(ok){localStorage.setItem(SYNC_BASE_KEY,mergedJson);await window.storage.set("wcm_v8",mergedJson);setData(merged);setSyncStatus("synced");}
+            else setSyncStatus("offline");
+            return;
+          }
+        }
+      }
+      const ok=await gistWrite(json);
+      if(ok){localStorage.setItem(SYNC_BASE_KEY,json);setSyncStatus("synced");}
+      else setSyncStatus("offline");
     }, 2000);
+  },[syncStatus]);
+
+  const resolveConflict = useCallback(async({base,server,mergeLocal,resolvedChanges})=>{
+    // Apply local-only auto-merges then user's conflict choices on top of server
+    let merged=applyChanges(server,mergeLocal);
+    merged=applyChanges(merged,resolvedChanges);
+    const mergedJson=JSON.stringify({...merged,_savedAt:Date.now()});
+    const ok=await gistWrite(mergedJson);
+    if(ok){localStorage.setItem(SYNC_BASE_KEY,mergedJson);await window.storage.set("wcm_v8",mergedJson);setData(merged);setSyncStatus("synced");}
+    else setSyncStatus("offline");
+    setPendingConflict(null);
   },[]);
+
+  // Pull latest from cloud when tab becomes visible (catches changes made on other devices)
+  useEffect(()=>{
+    if(!ready) return;
+    const onViz=async()=>{
+      if(document.visibilityState!=='visible') return;
+      const now=Date.now();
+      if(now-lastFocusRef.current<30000) return; // max once per 30s
+      lastFocusRef.current=now;
+      const baseRaw=localStorage.getItem(SYNC_BASE_KEY);
+      const base=baseRaw?JSON.parse(baseRaw):null;
+      if(!base) return;
+      const serverContent=await gistFetch();
+      if(!serverContent) return;
+      const server=JSON.parse(serverContent);
+      if(!server._savedAt||!base._savedAt||server._savedAt<=base._savedAt) return;
+      // Server is newer — only auto-pull if we have no local unsaved changes
+      const strip=o=>{const c={...o};delete c._savedAt;return c;};
+      const baseClean=strip(base), serverClean=strip(server);
+      const localCh=diffStates(baseClean,dataRef.current||{});
+      if(Object.keys(localCh).length===0){
+        const sJson=JSON.stringify(server);
+        localStorage.setItem(SYNC_BASE_KEY,sJson);
+        await window.storage.set("wcm_v8",sJson);
+        setData(serverClean);
+        setSyncStatus("synced");
+      }
+    };
+    document.addEventListener('visibilitychange',onViz);
+    return()=>document.removeEventListener('visibilitychange',onViz);
+  },[ready]);
 
   const upd = d => { setData(d); save(d); };
   const dismiss = k => setDismissed(p=>({...p,[k]:true}));
@@ -1275,14 +1524,25 @@ function App() {
           </div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
-          {syncStatus==="syncing" && <span style={{fontSize:11,color:C.gray,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,animation:"wcmpulse 1s infinite",flexShrink:0}}/>Syncing…</span>}
-          {syncStatus==="synced"  && <span style={{fontSize:11,color:C.teal,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.teal,flexShrink:0}}/>Synced</span>}
-          {syncStatus==="offline" && <span style={{fontSize:11,color:C.amber,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>Local only</span>}
+          {syncStatus==="syncing"  && <span style={{fontSize:11,color:C.gray,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,animation:"wcmpulse 1s infinite",flexShrink:0}}/>Syncing…</span>}
+          {syncStatus==="synced"   && <span style={{fontSize:11,color:C.teal,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.teal,flexShrink:0}}/>Synced</span>}
+          {syncStatus==="offline"  && <span style={{fontSize:11,color:C.amber,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>Offline</span>}
+          {syncStatus==="conflict" && <span style={{fontSize:11,color:C.red,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.red,flexShrink:0}}/>Conflict</span>}
           {flash && <span style={{fontSize:12,color:C.teal,fontWeight:600}}>Saved</span>}
           <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",cursor:"pointer"}} title="Toggle dark mode">{data.darkMode?"☀️":"🌙"}</button>
           <button onClick={()=>upd(JSON.parse(JSON.stringify(DEFAULT_STATE)))} style={{fontSize:11,padding:"5px 12px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>Reset defaults</button>
         </div>
       </div>
+
+      {/* ── Offline banner ── */}
+      {syncStatus==="offline" && (
+        <Banner type="warn">
+          <strong>You're offline</strong> — your changes are saved on this device and will sync automatically when you reconnect.
+        </Banner>
+      )}
+
+      {/* ── Conflict modal ── */}
+      {pendingConflict && <ConflictModal pending={pendingConflict} data={data} onResolve={resolveConflict}/>}
 
       {/* ── Renewal alerts ── */}
       {renewalsDue.map(s=>(
