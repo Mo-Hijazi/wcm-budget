@@ -784,6 +784,9 @@ function App() {
   const [newGoalDate,        setNewGoalDate]        = useState("");
   const [newGoalMonthly,     setNewGoalMonthly]     = useState("");
   const [savingsApy,         setSavingsApy]         = useState("4.5");
+  const [trendCats,          setTrendCats]          = useState(null); // null = use default top-4
+  const [compareA,           setCompareA]           = useState(null); // {type:"month"|"year", ay, mi}
+  const [compareB,           setCompareB]           = useState(null);
 
   // Load
   useEffect(()=>{
@@ -818,6 +821,12 @@ function App() {
         if(!loaded.savingsGoals) loaded.savingsGoals=[];
         if(!loaded.savingsLog) loaded.savingsLog=[];
         loaded.years.forEach((y,i)=>{if(!y.startDate)Object.assign(y,YEAR_CONFIGS[i]);});
+        // Migration: add any year configs missing from a saved state (e.g. Extended year added post-launch)
+        YEAR_CONFIGS.forEach((cfg,i)=>{
+          if(!loaded.years.find(y=>y.id===cfg.id)){
+            loaded.years.splice(i,0,{...cfg,monthly:{...DEFAULT_MONTHLY[i]},monthlyOverrides:{}});
+          }
+        });
         setData(loaded);
       }
       catch(e){console.error(e);setData(JSON.parse(JSON.stringify(DEFAULT_STATE)));setSyncStatus("offline");}
@@ -972,7 +981,8 @@ function App() {
 
   if(!ready) return <div style={{padding:40,color:C.gray,fontSize:14,fontFamily:"system-ui"}}>Loading…</div>;
 
-  const yr   = data.years[ay];
+  const yr   = data.years.find(y=>y.id===ay)||data.years[0];
+  const yrStartYear = yr.startDate ? new Date(yr.startDate+"T12:00:00").getFullYear() : 2026;
   const cats = data.categories;
   const subs = data.subscriptions||[];
   const subsMo = Math.round(subMonthlyTotal(subs));
@@ -995,9 +1005,10 @@ function App() {
     if(d.monthDisabled?.[dk]) d.monthDisabled[dk]=d.monthDisabled[dk].filter(c=>c!==catId);
     // set this month's budget to at least what's been spent
     const spent=spentInMonth(catId,selMonth);
-    if(!d.years[ay].monthlyOverrides) d.years[ay].monthlyOverrides={};
-    if(!d.years[ay].monthlyOverrides[mk]) d.years[ay].monthlyOverrides[mk]={};
-    d.years[ay].monthlyOverrides[mk][catId]=Math.ceil(spent);
+    const dyr=d.years.find(y=>y.id===ay)||d.years[0];
+    if(!dyr.monthlyOverrides) dyr.monthlyOverrides={};
+    if(!dyr.monthlyOverrides[mk]) dyr.monthlyOverrides[mk]={};
+    dyr.monthlyOverrides[mk][catId]=Math.ceil(spent);
     upd(d);
   };
   const toggleMonthCat = (catId) => {const d=JSON.parse(JSON.stringify(data));if(!d.monthDisabled)d.monthDisabled={};const mk=ay+"-"+MONTH_NAMES[selMonth];const cur=d.monthDisabled[mk]||[];d.monthDisabled[mk]=cur.includes(catId)?cur.filter(c=>c!==catId):[...cur,catId];upd(d);};
@@ -1024,9 +1035,10 @@ function App() {
   const allEntriesFlat = [...(data.currentWeekEntries||[]), ...((data.weeklyArchive||[]).flatMap(a=>a.entries||[]))];
   const spentInMonth = (catId, mIdx) => {
     const calMonth = (mIdx + 7) % 12;
+    const calYear = yrStartYear + (mIdx >= 5 ? 1 : 0);
     return allEntriesFlat.filter(e=>{
       const dt=new Date(e.date+"T12:00:00");
-      return e.catId===catId && dt.getMonth()===calMonth;
+      return e.catId===catId && dt.getMonth()===calMonth && dt.getFullYear()===calYear;
     }).reduce((a,e)=>a+Number(e.amount),0);
   };
   // Unbudgeted categories for the selected month: removed from plan but have spending
@@ -1054,6 +1066,29 @@ function App() {
   // Year net: full 12-month cumulative
   let curYrNet = 0;
   for(let mi=0; mi<12; mi++) curYrNet += monthNetFor(mi);
+
+  // Prior-year carryover: sum of all complete years before this one (for cross-year balance)
+  const priorYearsCarryover = (() => {
+    let total = 0;
+    for(const y of data.years) {
+      if(y.id === ay) break;
+      const yMoSpendable = Math.max((Number(y.grant)||0)-(Number(y.tuitionFees)||0)-(Number(y.healthIns)||0),0)/12 + (Number(y.otherIncome)||0);
+      const yDisabled = data.monthDisabled||{};
+      MONTH_NAMES.forEach((mn,mi)=>{
+        const disM = yDisabled[y.id+"-"+mn]||[];
+        let planned=0, unb=0;
+        cats.forEach(c=>{
+          if(c.id==="subs"){if(!disM.includes("subs")) planned+=subsMo;return;}
+          if(disM.includes(c.id)){if(!c.locked&&!c.autoCalc) unb+=spentInMonth(c.id,mi);}
+          else{const ov=y.monthlyOverrides?.[mn]?.[c.id];planned+=(ov!==undefined?ov:(Number(y.monthly[c.id])||0));}
+        });
+        total += yMoSpendable - planned - unb;
+      });
+    }
+    return Math.round(total);
+  })();
+  // Total balance = prior years + current year so far (used by Growth Projector)
+  const totalAccumulatedBalance = priorYearsCarryover + runningBalance;
 
 
   // 5-yr
@@ -1155,7 +1190,8 @@ function App() {
     const catObj = cats.find(c=>c.id===wCat);
     const isUnbudgeted = d.monthDisabled?.[mk]?.includes(wCat) && wCat!=="subs";
 
-    if(entryWeek < thisWeek) {
+    if(entryWeek !== thisWeek) {
+      // past OR future week — file to correct archive slot
       const ex = d.weeklyArchive.find(a=>a.weekStart===entryWeek);
       if(ex){ex.entries.push(entry);ex.total=ex.entries.reduce((a,e)=>a+Number(e.amount),0);}
       else d.weeklyArchive.push({weekStart:entryWeek,weekEnd:getSunday(entryWeek),entries:[entry],total:entry.amount});
@@ -1184,13 +1220,14 @@ function App() {
 
     // Recompute that month's net (spendable - planned - unbudgeted) to flag over-budget
     const allFlat=[...(d.currentWeekEntries||[]),...((d.weeklyArchive||[]).flatMap(a=>a.entries||[]))];
-    const spentCat=(cid)=>allFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return e.catId===cid&&dt.getMonth()===((eMonthIdx+7)%12);}).reduce((a,e)=>a+Number(e.amount),0);
+    const eCalYr=yrStartYear+(eMonthIdx>=5?1:0);
+    const spentCat=(cid)=>allFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return e.catId===cid&&dt.getMonth()===((eMonthIdx+7)%12)&&dt.getFullYear()===eCalYr;}).reduce((a,e)=>a+Number(e.amount),0);
     const disabledThisMonth=d.monthDisabled?.[mk]||[];
     let planned=0, unb=0;
     cats.forEach(c=>{
       if(c.id==="subs"){ if(!disabledThisMonth.includes("subs")) planned+=subsMo; return; }
       if(disabledThisMonth.includes(c.id)){ if(!c.locked&&!c.autoCalc) unb+=spentCat(c.id); }
-      else { const ov=d.years[ay].monthlyOverrides?.[MONTH_NAMES[eMonthIdx]]?.[c.id]; planned += (ov!==undefined?ov:(Number(d.years[ay].monthly[c.id])||0)); }
+      else { const dyr2=d.years.find(y=>y.id===ay)||d.years[0]; const ov=dyr2.monthlyOverrides?.[MONTH_NAMES[eMonthIdx]]?.[c.id]; planned += (ov!==undefined?ov:(Number(dyr2.monthly[c.id])||0)); }
     });
     const deficit=Math.round(planned+unb-moSpendable);
     if(deficit>0){
@@ -1332,7 +1369,7 @@ function App() {
   const rolloverReco = (surplus) => {
     if(surplus<=0) return null;
     const recs = [];
-    const yrData = data.years[ay];
+    const yrData = data.years.find(y=>y.id===ay)||data.years[0];
     if(!(yrData.monthly.savings||0)) recs.push(`Consider building an emergency fund (goal: ${fmt(moSpend*3)})`);
     if(!(yrData.monthly.exams||0)) recs.push(`Set aside ${fmt(surplus)} for USMLE Step exams (~$850 each)`);
     if(subsMo < 50) recs.push(`Consider adding a study resource (UWorld, Amboss) for ${fmt(surplus)}/mo`);
@@ -1341,6 +1378,8 @@ function App() {
   };
 
   const isPastWeekDate = wDate && getMonday(wDate) < getMonday(new Date());
+  const isFutureWeekDate = wDate && getMonday(wDate) > getMonday(new Date());
+  const isOtherWeekDate = isPastWeekDate || isFutureWeekDate;
 
   return (
     <div style={{fontFamily:"'Inter',system-ui,sans-serif",maxWidth:940,margin:"0 auto",padding:"24px 20px",minHeight:"100vh",background:C.bg,color:C.text,transition:"background .3s, color .3s"}}>
@@ -1583,7 +1622,7 @@ function App() {
         <MetricTile label="Monthly plan"        value={fmt(moSpend)}     sub={subsMo>0?`incl. ${fmt(subsMo)} subs`:"planned spending"}/>
         <MetricTile label="Monthly surplus"    value={fmtS(moSurplus)}  sub={moSurplus>0?"available to save":moSurplus<0?"over budget":"balanced"} color={moSurplus>0?C.green:moSurplus<0?C.red:C.gray}/>
         <MetricTile label="Year net"           value={fmtS(curYrNet)}   sub="full 12 months" color={curYrNet>=0?C.green:C.red}/>
-        <MetricTile label="Running balance"    value={fmtS(runningBalance)} sub={"thru "+MONTH_NAMES[selMonth]} color={runningBalance>=0?C.teal:C.red}/>
+        <MetricTile label="Total balance"    value={fmtS(totalAccumulatedBalance)} sub={"thru "+MONTH_NAMES[selMonth]+(priorYearsCarryover!==0?" · incl. prior yrs":"")} color={totalAccumulatedBalance>=0?C.teal:C.red}/>
       </div>
 
       {/* ── Tabs ── */}
@@ -1740,12 +1779,17 @@ function App() {
               ))}
             </Card>
 
-            <Card accent={runningBalance>=0?C.teal:C.red}>
+            <Card accent={totalAccumulatedBalance>=0?C.teal:C.red}>
               <SectionTitle>Running balance</SectionTitle>
-              <div style={{fontSize:26,fontWeight:700,color:runningBalance>=0?C.teal:C.red,margin:"6px 0"}}>{fmtS(runningBalance)}</div>
-              <div style={{fontSize:11,color:C.gray,lineHeight:1.6}}>Your cumulative position from {MONTH_FULL[0]} through {MONTH_FULL[selMonth]}. Each month's surplus or deficit rolls forward automatically — nothing to bank by hand.</div>
-              {runningBalance>moSpendable*2 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:6,fontSize:11,color:C.green}}>You're building a healthy cushion. Consider moving some into a high-yield savings account.</div>}
-              {runningBalance<0 && <div style={{marginTop:8,padding:"6px 10px",background:C.redLight,borderRadius:6,fontSize:11,color:C.red}}>You're running a cumulative deficit. Review spending or adjust your budget.</div>}
+              <div style={{fontSize:26,fontWeight:700,color:totalAccumulatedBalance>=0?C.teal:C.red,margin:"6px 0"}}>{fmtS(totalAccumulatedBalance)}</div>
+              <div style={{fontSize:11,color:C.gray,lineHeight:1.6}}>
+                {priorYearsCarryover!==0
+                  ? <>Prior years: <strong style={{color:priorYearsCarryover>=0?C.teal:C.red}}>{fmtS(priorYearsCarryover)}</strong> · This year so far: <strong style={{color:runningBalance>=0?C.teal:C.red}}>{fmtS(runningBalance)}</strong></>
+                  : <>Cumulative surplus/deficit from {MONTH_FULL[0]} through {MONTH_FULL[selMonth]}.</>
+                }
+              </div>
+              {totalAccumulatedBalance>moSpendable*2 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:6,fontSize:11,color:C.green}}>You're building a healthy cushion. Consider moving some into a high-yield savings account.</div>}
+              {totalAccumulatedBalance<0 && <div style={{marginTop:8,padding:"6px 10px",background:C.redLight,borderRadius:6,fontSize:11,color:C.red}}>You're running a cumulative deficit. Review spending or adjust your budget.</div>}
             </Card>
 
             <Card>
@@ -1803,8 +1847,8 @@ function App() {
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Date</div>
                   <input type="date" value={wDate} onChange={e=>setWDate(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${isPastWeekDate?C.amber:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
-                  {isPastWeekDate && <div style={{fontSize:11,color:C.amber,marginTop:4,fontWeight:500}}>Will be archived to week of {getMonday(wDate)}</div>}
+                    style={{width:"100%",fontSize:13,border:`1px solid ${isOtherWeekDate?C.amber:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+                  {isOtherWeekDate && <div style={{fontSize:11,color:C.amber,marginTop:4,fontWeight:500}}>{isFutureWeekDate?"Future date —":"Past date —"} will be filed to week of {getMonday(wDate)}</div>}
                 </div>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Category</div>
@@ -1902,10 +1946,10 @@ function App() {
 
       {/* ══════════════ CHARTS ══════════════ */}
       {tab==="charts" && (()=>{
-        // Running balance per month (cumulative)
+        // Running balance: offset by prior-year carryover so line starts where you actually stand
         const runBalData = MONTH_NAMES.map((m,mi)=>{
-          let bal=0; for(let i=0;i<=mi;i++) bal+=monthNetFor(i);
-          return {name:m, balance:Math.round(bal)};
+          let yearNet=0; for(let i=0;i<=mi;i++) yearNet+=monthNetFor(i);
+          return {name:m, balance:Math.round(priorYearsCarryover+yearNet), yearNet:Math.round(yearNet)};
         });
         // Budget vs actual per month for selected year
         const budgetVsActual = MONTH_NAMES.map((m,mi)=>{
@@ -1919,35 +1963,92 @@ function App() {
             budgeted+=(ov!==undefined?ov:(Number(yr.monthly[c.id])||0));
           });
           const calMo=(mi+7)%12;
-          const actual=allEntriesFlat.filter(e=>new Date(e.date+"T12:00:00").getMonth()===calMo).reduce((a,e)=>a+Number(e.amount),0);
+          const calYr=yrStartYear+(mi>=5?1:0);
+          const actual=allEntriesFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return dt.getMonth()===calMo&&dt.getFullYear()===calYr;}).reduce((a,e)=>a+Number(e.amount),0);
           return {name:m, Budgeted:Math.round(budgeted), Actual:Math.round(actual)};
         });
         return (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {/* Running balance */}
-            <Card>
-              <SectionTitle>Running balance</SectionTitle>
-              <div style={{fontSize:11,color:C.gray,marginBottom:10}}>Cumulative surplus/deficit from August through each month. Positive = ahead of budget.</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={runBalData} margin={{top:4,right:4,bottom:0,left:0}}>
-                  <defs>
-                    <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
-                    </linearGradient>
-                    <linearGradient id="balGradNeg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={C.red} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={C.red} stopOpacity={0.02}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+(v>=0?"+":"")+Math.round(v)} axisLine={false} tickLine={false} width={52}/>
-                  <Tooltip formatter={v=>[fmtS(v),"Balance"]} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
-                  <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
-                  <Area type="monotone" dataKey="balance" stroke={runBalData[selMonth]?.balance>=0?C.teal:C.red} fill={runBalData[selMonth]?.balance>=0?"url(#balGrad)":"url(#balGradNeg)"} strokeWidth={2} dot={(p)=>p.index===selMonth?<circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={p.value>=0?C.teal:C.red}/>:<circle key={p.index} r={0}/>}/>
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
+            {(()=>{
+              const balVals = runBalData.map(d=>d.balance);
+              const maxBal = Math.max(...balVals);
+              const minBal = Math.min(...balVals);
+              const crossesZero = maxBal > 0 && minBal < 0;
+              const allNeg = maxBal <= 0;
+              // Explicit domain so gradient zero-fraction aligns exactly with ReferenceLine y=0
+              const absExtreme = Math.max(Math.abs(maxBal), Math.abs(minBal));
+              const nicePad = Math.max(300, absExtreme * 0.18);
+              const yDomMax = Math.ceil((maxBal + nicePad) / 200) * 200;
+              const yDomMin = Math.floor((minBal - nicePad) / 200) * 200;
+              const yRange = yDomMax - yDomMin;
+              // Fraction (0=top, 1=bottom in SVG) where y=0 sits inside [yDomMin, yDomMax]
+              const zeroFrac = crossesZero
+                ? Math.max(0.02, Math.min(0.98, yDomMax / yRange))
+                : (allNeg ? 0.01 : 0.99);
+              const strokeColor = crossesZero ? "url(#balStrokeGrad)" : (allNeg ? C.red : C.teal);
+              const fillColor   = crossesZero ? "url(#balFillGrad)"   : (allNeg ? "url(#balGradNeg)" : "url(#balGrad)");
+              const monthLabel  = MONTH_NAMES[selMonth];
+              const totalLabel  = totalAccumulatedBalance >= 0
+                ? `Total gain in ${monthLabel}`
+                : `Debt in ${monthLabel}`;
+              const priorColor  = priorYearsCarryover >= 0 ? C.teal : C.red;
+              return (
+                <Card>
+                  <SectionTitle>Running balance — {yr.label.split("—")[0].trim()}</SectionTitle>
+                  <div style={{display:"flex",gap:14,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+                    {priorYearsCarryover!==0 && (
+                      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.gray}}>
+                        <svg width="20" height="8" style={{flexShrink:0}}><line x1="0" y1="4" x2="20" y2="4" stroke={priorColor} strokeWidth="1.5" strokeDasharray="5,3"/></svg>
+                        <span>Entering {yr.label.split("—")[0].trim()}: <strong style={{color:priorColor}}>{fmtS(priorYearsCarryover)}</strong></span>
+                      </div>
+                    )}
+                    {crossesZero && (
+                      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.gray}}>
+                        <svg width="20" height="8" style={{flexShrink:0}}><line x1="0" y1="4" x2="20" y2="4" stroke={C.gray} strokeWidth="1" strokeDasharray="4,3"/></svg>
+                        <span style={{color:C.gray}}>Break-even ($0)</span>
+                      </div>
+                    )}
+                    <div style={{fontSize:11,marginLeft:"auto"}}>
+                      <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.red}}>{totalLabel}: {fmtS(totalAccumulatedBalance)}</strong>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={runBalData} margin={{top:4,right:4,bottom:0,left:0}}>
+                      <defs>
+                        <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
+                        </linearGradient>
+                        <linearGradient id="balGradNeg" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.red} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={C.red} stopOpacity={0.02}/>
+                        </linearGradient>
+                        {crossesZero && <>
+                          <linearGradient id="balStrokeGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={`${Math.max(0,zeroFrac*100-4)}%`} stopColor={C.teal} stopOpacity={1}/>
+                            <stop offset={`${Math.min(100,zeroFrac*100+4)}%`} stopColor={C.red} stopOpacity={1}/>
+                          </linearGradient>
+                          <linearGradient id="balFillGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"                        stopColor={C.teal} stopOpacity={0.28}/>
+                            <stop offset={`${zeroFrac*100*0.88}%`}   stopColor={C.teal} stopOpacity={0.04}/>
+                            <stop offset={`${zeroFrac*100}%`}        stopColor={C.red}  stopOpacity={0.04}/>
+                            <stop offset="100%"                      stopColor={C.red}  stopOpacity={0.28}/>
+                          </linearGradient>
+                        </>}
+                      </defs>
+                      <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                      <YAxis domain={[yDomMin, yDomMax]} tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v===0?"$0":v>0?"+"+fmt(v):fmtS(v)} axisLine={false} tickLine={false} width={60}/>
+                      <Tooltip formatter={v=>[fmtS(v),"Total position"]} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                      {crossesZero && <ReferenceLine y={0} stroke={C.gray} strokeOpacity={0.45} strokeDasharray="4 3"/>}
+                      {priorYearsCarryover!==0 && <ReferenceLine y={priorYearsCarryover} stroke={priorColor} strokeOpacity={0.65} strokeDasharray="6 3"/>}
+                      <Area type="monotone" dataKey="balance" stroke={strokeColor} fill={fillColor} strokeWidth={2}
+                        dot={(p)=>p.index===selMonth?<circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={p.value>=0?C.teal:C.red}/>:<circle key={p.index} r={0}/>}/>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+              );
+            })()}
 
             {/* Budget vs Actual */}
             <Card>
@@ -1960,15 +2061,17 @@ function App() {
                 ))}
                 <div style={{fontSize:11,color:C.gray,marginLeft:"auto",alignSelf:"center"}}>Actual = logged weekly entries only</div>
               </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={budgetVsActual} barGap={2} barCategoryGap="28%">
+              {budgetVsActual.every(d=>d.Actual===0)
+                ? <div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:C.gray}}>No spending logged yet — months will appear here as you log entries.</div>
+                : <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={budgetVsActual.filter(d=>d.Actual>0)} barGap={2} barCategoryGap="28%">
                   <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                  <Tooltip formatter={v=>fmt(v)} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                  <Tooltip formatter={v=>fmt(v)} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
                   <Bar dataKey="Budgeted" fill={C.teal} radius={[3,3,0,0]} opacity={0.85}/>
                   <Bar dataKey="Actual" fill={C.red} radius={[3,3,0,0]}/>
                 </BarChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </Card>
 
             {/* Pie + breakdown */}
@@ -1978,7 +2081,7 @@ function App() {
                 <ResponsiveContainer width="100%" height={210}>
                   <PieChart><Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={54} outerRadius={88} paddingAngle={2}>
                     {pieData.map((e,i)=><Cell key={i} fill={e.color}/>)}
-                  </Pie><Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></PieChart>
+                  </Pie><Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></PieChart>
                 </ResponsiveContainer>
               </Card>
               <Card>
@@ -2000,6 +2103,163 @@ function App() {
               </Card>
             </div>
 
+            {/* Monthly trend per category */}
+            {(()=>{
+              const catTotals=cats.map(c=>({
+                id:c.id,label:c.label,
+                total:MONTH_NAMES.reduce((sum,m,mi)=>{
+                  const calMo=(mi+7)%12;
+                  const calYr=yrStartYear+(mi>=5?1:0);
+                  return sum+allEntriesFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return dt.getMonth()===calMo&&dt.getFullYear()===calYr&&e.catId===c.id;}).reduce((a,e)=>a+Number(e.amount),0);
+                },0)
+              })).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
+              const defaultTop4=catTotals.slice(0,4).map(c=>c.id);
+              const activeTrend=trendCats||defaultTop4;
+              const trendData=MONTH_NAMES.map((m,mi)=>{
+                const calMo=(mi+7)%12;
+                const calYr=yrStartYear+(mi>=5?1:0);
+                const row={name:m};
+                cats.forEach(c=>{
+                  if(!activeTrend.includes(c.id)) return;
+                  row[c.label]=Math.round(allEntriesFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return dt.getMonth()===calMo&&dt.getFullYear()===calYr&&e.catId===c.id;}).reduce((a,e)=>a+Number(e.amount),0));
+                });
+                return row;
+              });
+              const activeCats=cats.filter(c=>activeTrend.includes(c.id));
+              // Find the range: first → last month that has ANY spending across active cats
+              const hasSpend=trendData.map(row=>activeCats.some(c=>(row[c.label]||0)>0));
+              const firstIdx=hasSpend.indexOf(true);
+              const lastIdx=hasSpend.lastIndexOf(true);
+              const filteredTrend=firstIdx===-1?[]:trendData.slice(firstIdx,lastIdx+1);
+              return (
+                <Card>
+                  <SectionTitle>Monthly spending trend</SectionTitle>
+                  <div style={{fontSize:11,color:C.gray,marginBottom:10}}>Actual spending per category across the year. Toggle categories below.</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+                    {catTotals.map((c,i)=>{
+                      const on=activeTrend.includes(c.id);
+                      const color=CHART_COLORS[cats.findIndex(x=>x.id===c.id)%CHART_COLORS.length];
+                      return (
+                        <button key={c.id} onClick={()=>{
+                          const cur=trendCats||defaultTop4;
+                          setTrendCats(cur.includes(c.id)?cur.filter(x=>x!==c.id):[...cur,c.id]);
+                        }} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:99,fontSize:11,fontWeight:500,cursor:"pointer",border:`1px solid ${on?color:C.border}`,background:on?color+"22":"transparent",color:on?color:C.gray}}>
+                          <div style={{width:7,height:7,borderRadius:99,background:on?color:C.border}}/>
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {filteredTrend.length===0
+                    ? <div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:C.gray}}>No spending logged yet — entries will appear here as you log them.</div>
+                    : <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={filteredTrend} margin={{top:4,right:4,bottom:0,left:0}}>
+                      <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
+                      <Tooltip formatter={v=>fmt(v)} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                      <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                      {activeCats.map((c,i)=>(
+                        <Line key={c.id} type="monotone" dataKey={c.label} stroke={CHART_COLORS[cats.findIndex(x=>x.id===c.id)%CHART_COLORS.length]} strokeWidth={2} dot={false} activeDot={{r:4}}/>
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>}
+                </Card>
+              );
+            })()}
+
+            {/* Comparison mode */}
+            {(()=>{
+              // Build period options: individual months for each year + full years
+              const periodOptions=[];
+              data.years.forEach(y=>{
+                periodOptions.push({label:y.label.split("—")[0].trim(),type:"year",ayId:y.id});
+                MONTH_NAMES.forEach((m,mi)=>periodOptions.push({label:`${m} (${y.label.split("—")[0].trim()})`,type:"month",ayId:y.id,mi}));
+              });
+              const defaultA=compareA||(periodOptions.find(p=>p.type==="month"&&p.ayId===ay&&p.mi===((selMonth-1+12)%12))||periodOptions[1]||periodOptions[0]);
+              const defaultB=compareB||(periodOptions.find(p=>p.type==="month"&&p.ayId===ay&&p.mi===selMonth)||periodOptions[0]);
+
+              const getActualForCat=(catId,period)=>{
+                const pYr=data.years.find(y=>y.id===period.ayId);
+                const pStartYr=pYr?.startDate?new Date(pYr.startDate+"T12:00:00").getFullYear():2026;
+                if(period.type==="month"){
+                  const calMo=(period.mi+7)%12;
+                  const calYr=pStartYr+(period.mi>=5?1:0);
+                  return allEntriesFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return dt.getMonth()===calMo&&dt.getFullYear()===calYr&&e.catId===catId;}).reduce((a,e)=>a+Number(e.amount),0);
+                } else {
+                  return MONTH_NAMES.reduce((sum,m,mi)=>{
+                    const calMo=(mi+7)%12;
+                    const calYr=pStartYr+(mi>=5?1:0);
+                    return sum+allEntriesFlat.filter(e=>{const dt=new Date(e.date+"T12:00:00");return dt.getMonth()===calMo&&dt.getFullYear()===calYr&&e.catId===catId;}).reduce((a,e)=>a+Number(e.amount),0);
+                  },0);
+                }
+              };
+
+              const cmpData=cats.map((c,i)=>{
+                const a=Math.round(getActualForCat(c.id,defaultA));
+                const b=Math.round(getActualForCat(c.id,defaultB));
+                return {name:c.label,A:a,B:b,delta:b-a,color:CHART_COLORS[i%CHART_COLORS.length]};
+              }).filter(r=>r.A>0||r.B>0);
+
+              const selStyle={fontSize:12,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",background:C.bg,color:C.text,cursor:"pointer"};
+              return (
+                <Card>
+                  <SectionTitle>Comparison</SectionTitle>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+                    <select value={JSON.stringify(compareA||defaultA)} onChange={e=>setCompareA(JSON.parse(e.target.value))} style={selStyle}>
+                      {periodOptions.map((p,i)=><option key={i} value={JSON.stringify(p)}>{p.label}</option>)}
+                    </select>
+                    <span style={{fontSize:13,color:C.gray}}>vs</span>
+                    <select value={JSON.stringify(compareB||defaultB)} onChange={e=>setCompareB(JSON.parse(e.target.value))} style={selStyle}>
+                      {periodOptions.map((p,i)=><option key={i} value={JSON.stringify(p)}>{p.label}</option>)}
+                    </select>
+                  </div>
+                  {cmpData.length===0
+                    ? <div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:C.gray}}>No spending logged for either period — entries will appear here once you log them.</div>
+                    : <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={cmpData} barGap={2} barCategoryGap="28%">
+                      <XAxis dataKey="name" tick={{fontSize:10,fill:C.gray}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
+                      <Tooltip formatter={(v,name)=>[fmt(v), name==="A"?defaultA.label:defaultB.label]} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                      <Legend formatter={(v)=>v==="A"?defaultA.label:defaultB.label} wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                      <Bar dataKey="A" fill={C.teal} radius={[3,3,0,0]} opacity={0.85}/>
+                      <Bar dataKey="B" fill={C.amber} radius={[3,3,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>}
+                  {cmpData.length>0 && (
+                    <div style={{marginTop:14}}>
+                      {/* Column headers */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 100px",gap:4,padding:"0 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:2}}>
+                        <span style={{fontSize:10,fontWeight:600,color:C.gray,textTransform:"uppercase",letterSpacing:"0.04em"}}>Category</span>
+                        <span style={{fontSize:10,fontWeight:600,color:C.teal,textAlign:"right",textTransform:"uppercase",letterSpacing:"0.04em"}}>{defaultA.label}</span>
+                        <span style={{fontSize:10,fontWeight:600,color:C.amber,textAlign:"right",textTransform:"uppercase",letterSpacing:"0.04em"}}>{defaultB.label}</span>
+                        <span style={{fontSize:10,fontWeight:600,color:C.gray,textAlign:"right",textTransform:"uppercase",letterSpacing:"0.04em"}}>Change</span>
+                      </div>
+                      {cmpData.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)).map((r,i)=>{
+                        const pct=r.A>0?Math.round(Math.abs(r.delta)/r.A*100):null;
+                        const up=r.delta>0, down=r.delta<0;
+                        return (
+                          <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 100px",gap:4,padding:"7px 0",borderBottom:`1px solid ${C.border}`,alignItems:"center"}}>
+                            <span style={{fontSize:12,color:C.text}}>{r.name}</span>
+                            <span style={{fontSize:12,color:C.gray,textAlign:"right"}}>{fmt(r.A)}</span>
+                            <span style={{fontSize:12,color:C.gray,textAlign:"right"}}>{fmt(r.B)}</span>
+                            <div style={{display:"flex",justifyContent:"flex-end"}}>
+                              {r.delta===0
+                                ? <span style={{fontSize:11,color:C.gray}}>—</span>
+                                : <span style={{fontSize:11,fontWeight:600,color:up?C.red:C.green,display:"flex",alignItems:"center",gap:3}}>
+                                    <span style={{fontSize:13}}>{up?"↑":"↓"}</span>
+                                    {fmt(Math.abs(r.delta))}{pct!==null?` (${pct}%)`:""}
+                                  </span>
+                              }
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              );
+            })()}
+
             {/* Multi-year comparison */}
             <Card>
               <SectionTitle>Monthly spendable vs budget — all years</SectionTitle>
@@ -2014,7 +2274,7 @@ function App() {
                 <BarChart data={barData} barGap={4}>
                   <XAxis dataKey="name" tick={{fontSize:12,fill:C.gray}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                  <Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                  <Tooltip formatter={v=>fmt(v)+"/mo"} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
                   <Bar dataKey="Spendable" fill={C.teal} radius={[4,4,0,0]}/>
                   <Bar dataKey="Spend" fill={C.red} radius={[4,4,0,0]}/>
                 </BarChart>
@@ -2191,7 +2451,7 @@ function App() {
               <span style={{fontSize:13,color:C.textMid,fontWeight:500}}>APY</span>
               <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
               <span style={{fontSize:12,color:C.gray}}>%</span>
-              <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:runningBalance>=0?C.teal:C.red}}>{fmtS(runningBalance)}</strong></span>
+              <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.red}}>{fmtS(totalAccumulatedBalance)}</strong></span>
               <span style={{fontSize:12,color:C.gray}}>+ {fmt(yr.monthly.savings||0)}/mo savings</span>
             </div>
             {(()=>{
@@ -2200,26 +2460,51 @@ function App() {
               const mSav=Number(yr.monthly.savings)||0;
               const projData=Array.from({length:60}).map((_,i)=>{
                 const mo=i+1;
-                const compBal=runningBalance*Math.pow(1+r,mo);
+                const compBal=totalAccumulatedBalance*Math.pow(1+r,mo);
                 const savGrowth=r>0?mSav*(Math.pow(1+r,mo)-1)/r:mSav*mo;
                 return {name:mo%12===0?`Yr ${mo/12}`:(mo===1?"Now":""),month:mo,balance:Math.round(compBal+savGrowth)};
               });
+              // Months to graduation = months from now to last year's end date
+              const lastYearEnd = new Date(data.years[data.years.length-1].endDate||"2031-06-30");
+              const now = new Date();
+              const moToGrad = Math.max(1, Math.round((lastYearEnd - now) / (1000*60*60*24*30.44)));
+              const gradIdx = Math.min(moToGrad, 60) - 1;
+              const gradBal = projData[gradIdx]?.balance ?? projData[projData.length-1]?.balance;
+              const hysa4pct = totalAccumulatedBalance * 0.045;
+              const checkingEst = 0;
+              const hysaGain = Math.round(hysa4pct - checkingEst);
               return (
-                <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={projData} margin={{top:4,right:4,bottom:0,left:0}}>
-                    <defs>
-                      <linearGradient id="projGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v>=1000?"$"+Math.round(v/1000)+"k":("$"+v)} axisLine={false} tickLine={false} width={44}/>
-                    <Tooltip formatter={v=>[fmt(v),"Projected balance"]} contentStyle={{background:C.bgDark,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
-                    <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
-                    <Area type="monotone" dataKey="balance" stroke={C.teal} fill="url(#projGrad)" strokeWidth={2}/>
-                  </AreaChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <AreaChart data={projData} margin={{top:4,right:4,bottom:0,left:0}}>
+                      <defs>
+                        <linearGradient id="projGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.teal} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v>=1000?"$"+Math.round(v/1000)+"k":("$"+v)} axisLine={false} tickLine={false} width={44}/>
+                      <Tooltip formatter={v=>[fmt(v),"Projected balance"]} contentStyle={{background:C.bgDark,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+                      <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
+                      <Area type="monotone" dataKey="balance" stroke={C.teal} fill="url(#projGrad)" strokeWidth={2}/>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  <div style={{display:"flex",gap:12,marginTop:14,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:160,background:C.bgDark,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:11,color:C.gray,marginBottom:4}}>Projected graduation balance</div>
+                      <div style={{fontSize:20,fontWeight:700,color:gradBal>=0?C.teal:C.red}}>{gradBal>=0?"+":""}{fmt(gradBal)}</div>
+                      <div style={{fontSize:10,color:C.gray,marginTop:2}}>in ~{moToGrad} months at {apy||0}% APY</div>
+                    </div>
+                    {totalAccumulatedBalance>500 && hysaGain>0 && (
+                      <div style={{flex:1,minWidth:160,background:C.bgDark,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:11,color:C.gray,marginBottom:4}}>HYSA interest / year</div>
+                        <div style={{fontSize:20,fontWeight:700,color:C.green}}>+{fmt(hysaGain)}</div>
+                        <div style={{fontSize:10,color:C.gray,marginTop:2}}>on your {fmt(totalAccumulatedBalance)} total balance at 4.5% APY</div>
+                      </div>
+                    )}
+                  </div>
+                </>
               );
             })()}
           </Card>
@@ -2229,18 +2514,68 @@ function App() {
             <SectionTitle>Recommendations</SectionTitle>
             {(()=>{
               const recs=[];
-              const stepSaved=(data.stepGoals||[]).reduce((a,g)=>a+(g.saved||0),0);
-              const stepNeeded=(data.stepGoals||[]).reduce((a,g)=>a+g.targetAmount,0);
+              const apy=parseFloat(savingsApy)||0;
+              const mSav=Number(yr.monthly.savings)||0;
+
+              // STEP goals
+              const stepGoals=data.stepGoals||[];
+              const stepSaved=stepGoals.reduce((a,g)=>a+(g.saved||0),0);
+              const stepNeeded=stepGoals.reduce((a,g)=>a+g.targetAmount,0);
               const stepGap=Math.max(0,stepNeeded-stepSaved);
-              if(stepGap>0) recs.push({color:C.amber,text:`STEP fund gap: ${fmt(stepGap)} still needed. Allocate ~${fmt(Math.ceil(stepGap/24))}/mo to be ready by Year 3.`});
-              else recs.push({color:C.green,text:"Both STEP exam goals are fully funded — excellent!"});
-              if(!(yr.monthly.savings||0)) recs.push({color:C.red,text:"No savings line in your budget. Even $50–100/mo builds a 3-month emergency fund by graduation."});
-              else recs.push({color:C.teal,text:`You're budgeting ${fmt(yr.monthly.savings)}/mo for savings — that's ${fmt((yr.monthly.savings||0)*12)}/yr compounding.`});
-              if(runningBalance>moSpendable*2) recs.push({color:C.green,text:`Running balance of ${fmt(runningBalance)} is strong. A HYSA at 4–5% APY earns you passive interest on idle cash.`});
-              if(moSurplus>50) recs.push({color:C.teal,text:`${fmt(moSurplus)} monthly surplus available. Routing it to a savings goal adds ${fmt(moSurplus*12)} to your cushion this year.`});
-              if((data.savingsGoals||[]).length===0&&(data.stepGoals||[]).every(g=>(g.saved||0)>=g.targetAmount)) recs.push({color:C.blue,text:"All goals funded! Consider adding a custom goal — laptop upgrade, travel for residency interviews, or a 6-month emergency fund."});
+              const examBudget=yr.monthly.exams||0;
+              if(stepGap>0){
+                if(examBudget>0){
+                  const moToFund=Math.ceil(stepGap/examBudget);
+                  const fundDate=new Date(); fundDate.setMonth(fundDate.getMonth()+moToFund);
+                  const fundLabel=fundDate.toLocaleString("default",{month:"short",year:"numeric"});
+                  recs.push({color:C.amber,text:`STEP fund gap: ${fmt(stepGap)} remaining. At your current ${fmt(examBudget)}/mo exam budget, fully funded by ${fundLabel}.`});
+                } else {
+                  recs.push({color:C.red,text:`STEP fund gap: ${fmt(stepGap)} still needed. Add an Exams budget line — even ${fmt(Math.ceil(stepGap/24))}/mo gets you there by Year 3.`});
+                }
+              } else if(stepGoals.length>0){
+                recs.push({color:C.green,text:"All STEP exam goals are fully funded — excellent! You're set for board exams."});
+              }
+
+              // Savings line
+              if(!mSav){
+                recs.push({color:C.red,text:"No savings line in your budget. Even $50–100/mo builds a 3-month emergency fund before residency."});
+              } else {
+                const annualSav=mSav*12;
+                const r=apy/100/12;
+                const lastYearEnd=new Date(data.years[data.years.length-1].endDate||"2031-06-30");
+                const moLeft=Math.max(1,Math.round((lastYearEnd-new Date())/(1000*60*60*24*30.44)));
+                const savGrowth=r>0?mSav*(Math.pow(1+r,moLeft)-1)/r:mSav*moLeft;
+                recs.push({color:C.teal,text:`You're saving ${fmt(mSav)}/mo (${fmt(annualSav)}/yr). Over your remaining ~${moLeft} months of school, that compounds to ${fmt(Math.round(savGrowth))} at ${apy||0}% APY.`});
+              }
+
+              // HYSA recommendation
+              if(totalAccumulatedBalance>500){
+                const hysaEarn=Math.round(totalAccumulatedBalance*0.045);
+                recs.push({color:C.green,text:`Your ${fmt(totalAccumulatedBalance)} total balance earns ~${fmt(hysaEarn)}/yr in a 4.5% HYSA vs ~$0 sitting in a checking account.`});
+              } else if(totalAccumulatedBalance<0){
+                recs.push({color:C.red,text:`Total balance is ${fmtS(totalAccumulatedBalance)} — you're drawing down your buffer. Review your largest spending categories.`});
+              }
+
+              // Monthly surplus routing
+              if(moSurplus>50){
+                const unroutedGoals=(data.savingsGoals||[]).filter(g=>(g.saved||0)<g.targetAmount);
+                if(unroutedGoals.length>0){
+                  recs.push({color:C.teal,text:`${fmt(moSurplus)}/mo surplus unrouted. Adding it to "${unroutedGoals[0].label}" funds it ${fmt(moSurplus*12)} faster per year.`});
+                } else {
+                  recs.push({color:C.teal,text:`${fmt(moSurplus)}/mo surplus available. Consider routing it to a new goal — residency interview travel costs $3–5k on average.`});
+                }
+              }
+
+              // All goals funded
+              const allCustomFunded=(data.savingsGoals||[]).every(g=>(g.saved||0)>=g.targetAmount);
+              if(allCustomFunded&&stepGap===0&&(data.savingsGoals||[]).length===0&&stepGoals.length>0){
+                recs.push({color:C.blue,text:"All goals funded! Consider adding a custom goal — laptop upgrade, interview travel, or a 6-month emergency fund."});
+              }
+
+              if(recs.length===0) recs.push({color:C.gray,text:"Add budget lines and savings goals to get personalized recommendations here."});
+
               return recs.map((r,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 0",borderBottom:i<recs.length-1?`1px solid ${C.border}`:"none",fontSize:12}}>
                   <div style={{width:8,height:8,borderRadius:99,background:r.color,flexShrink:0,marginTop:4}}/>
                   <span style={{color:C.textMid,lineHeight:1.7}}>{r.text}</span>
                 </div>
