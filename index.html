@@ -1979,12 +1979,10 @@ function App() {
               // Explicit domain so gradient zero-fraction aligns exactly with ReferenceLine y=0
               const absExtreme = Math.max(Math.abs(maxBal), Math.abs(minBal));
               const nicePad = Math.max(300, absExtreme * 0.18);
-              const yDomMax = (priorYearsCarryover > 0 && priorYearsCarryover > maxBal)
+              const yDomMax = (priorYearsCarryover !== 0 && priorYearsCarryover > maxBal)
                 ? Math.ceil(priorYearsCarryover / 200) * 200
                 : Math.ceil((maxBal + nicePad) / 200) * 200;
-              const yDomMin = (priorYearsCarryover < 0 && priorYearsCarryover < minBal)
-                ? Math.floor(priorYearsCarryover / 200) * 200
-                : Math.floor((minBal - nicePad) / 200) * 200;
+              const yDomMin = Math.floor((minBal - nicePad) / 200) * 200;
               const yRange = yDomMax - yDomMin;
               // Fraction (0=top, 1=bottom in SVG) where y=0 sits inside [yDomMin, yDomMax]
               const zeroFrac = crossesZero
