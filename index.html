@@ -1100,33 +1100,39 @@ function App() {
                 if(!d.savingsLog) d.savingsLog=[];
                 d.savingsLog.push({id:"sl_"+Date.now(),goalId:savingsDepositGoal,amount:amt,date:savingsDepositDate,note:savingsDepositNote});
 
-                // Wire deposit into budget + weekly if not already budgeted that month
+                // Wire deposit into weekly + budget
                 const catId = inStep>=0 ? "exams" : "savings";
                 const depDate = new Date(savingsDepositDate+"T12:00:00");
                 const depAcadMonth = (depDate.getMonth()-7+12)%12;
                 const depMonthName = MONTH_NAMES[depAcadMonth];
-                const depAy = ay; // use current academic year
-                if(!d.years[depAy].monthlyOverrides) d.years[depAy].monthlyOverrides={};
-                if(!d.years[depAy].monthlyOverrides[depMonthName]) d.years[depAy].monthlyOverrides[depMonthName]={};
-                const existingBudget = d.years[depAy].monthlyOverrides[depMonthName][catId] !== undefined
-                  ? d.years[depAy].monthlyOverrides[depMonthName][catId]
-                  : (Number(d.years[depAy].monthly[catId])||0);
+                // Find which year config covers the deposit date
+                const depYrIdx = d.years.findIndex(y=>{
+                  if(!y.startDate||!y.endDate) return false;
+                  return savingsDepositDate>=y.startDate && savingsDepositDate<=y.endDate;
+                });
+                const depAy = depYrIdx>=0 ? depYrIdx : ay;
+                const depYr = d.years[depAy];
+                // Always add a weekly entry so deposit appears in Budget/Weekly actuals
+                const entry={id:"e_"+Date.now(),catId,amount:amt,note:(savingsDepositNote||"Savings deposit"),date:savingsDepositDate};
+                if(!d.currentWeekEntries) d.currentWeekEntries=[];
+                if(!d.weeklyArchive) d.weeklyArchive=[];
+                const entryWeek=getMonday(savingsDepositDate);
+                const thisWeek=getMonday(new Date());
+                if(entryWeek<thisWeek){
+                  const ex=d.weeklyArchive.find(a=>a.weekStart===entryWeek);
+                  if(ex){ex.entries.push(entry);ex.total=ex.entries.reduce((a,e)=>a+Number(e.amount),0);}
+                  else d.weeklyArchive.push({weekStart:entryWeek,weekEnd:getSunday(entryWeek),entries:[entry],total:entry.amount});
+                } else {
+                  d.currentWeekEntries.push(entry);
+                }
+                // If no budget set for this month, add deposit amount as the budget override
+                if(!depYr.monthlyOverrides) depYr.monthlyOverrides={};
+                if(!depYr.monthlyOverrides[depMonthName]) depYr.monthlyOverrides[depMonthName]={};
+                const existingBudget = depYr.monthlyOverrides[depMonthName][catId] !== undefined
+                  ? depYr.monthlyOverrides[depMonthName][catId]
+                  : (Number(depYr.monthly[catId])||0);
                 if(!existingBudget) {
-                  // No budget set for this month — add deposit amount as budget
-                  d.years[depAy].monthlyOverrides[depMonthName][catId] = amt;
-                  // Also add a weekly entry so it appears in Budget + Weekly tabs
-                  const entry={id:"e_"+Date.now(),catId,amount:amt,note:(savingsDepositNote||"Savings deposit"),date:savingsDepositDate};
-                  if(!d.currentWeekEntries) d.currentWeekEntries=[];
-                  if(!d.weeklyArchive) d.weeklyArchive=[];
-                  const entryWeek=getMonday(savingsDepositDate);
-                  const thisWeek=getMonday(new Date());
-                  if(entryWeek<thisWeek){
-                    const ex=d.weeklyArchive.find(a=>a.weekStart===entryWeek);
-                    if(ex){ex.entries.push(entry);ex.total=ex.entries.reduce((a,e)=>a+Number(e.amount),0);}
-                    else d.weeklyArchive.push({weekStart:entryWeek,weekEnd:getSunday(entryWeek),entries:[entry],total:entry.amount});
-                  } else {
-                    d.currentWeekEntries.push(entry);
-                  }
+                  depYr.monthlyOverrides[depMonthName][catId] = amt;
                   // Remove from disabled cats for that month if present
                   const mk=depAy+"-"+depMonthName;
                   if(d.monthDisabled?.[mk]) d.monthDisabled[mk]=d.monthDisabled[mk].filter(c=>c!==catId);
