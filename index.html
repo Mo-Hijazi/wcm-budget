@@ -1528,13 +1528,13 @@ function App() {
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Date</div>
                   <input type="date" value={wDate} onChange={e=>setWDate(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${isPastWeekDate?C.amber:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,boxSizing:"border-box"}}/>
+                    style={{width:"100%",fontSize:13,border:`1px solid ${isPastWeekDate?C.amber:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
                   {isPastWeekDate && <div style={{fontSize:11,color:C.amber,marginTop:4,fontWeight:500}}>Will be archived to week of {getMonday(wDate)}</div>}
                 </div>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Category</div>
                   <select value={wCat} onChange={e=>setWCat(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,boxSizing:"border-box"}}>
+                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}>
                     <option value="">Select category…</option>
                     {cats.filter(c=>!c.autoCalc&&!c.locked).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
@@ -1542,12 +1542,12 @@ function App() {
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Amount</div>
                   <input type="number" placeholder="0.00" value={wAmt} onChange={e=>setWAmt(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,boxSizing:"border-box"}}/>
+                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
                 </div>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Note (optional)</div>
                   <input type="text" placeholder="e.g. Trader Joe's" value={wNote} onChange={e=>setWNote(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,boxSizing:"border-box"}}/>
+                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
                 </div>
                 <button onClick={addEntry} disabled={!wCat||!wAmt} style={{padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!wCat||!wAmt)?C.bgDark:C.red,color:(!wCat||!wAmt)?C.gray:"#fff",cursor:(!wCat||!wAmt)?"not-allowed":"pointer",marginTop:2,transition:"all .15s"}}>
                   Add entry
