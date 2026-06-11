@@ -747,10 +747,37 @@ const BrandIcon = ({name, size=36}) => {
   );
 };
 
-// ── Category icons (clean Tabler-style text icons) ────────────────────────────
-const CAT_ICONS = {
-  housing:"⌂", food:"◈", transport:"◎", personal:"◇",
-  books:"▣", exams:"▤", savings:"◉", social:"◌", subs:"▦",
+// ── Marro icon system ─────────────────────────────────────────────────────────
+// Ring-derived line icons drawn on a 20×20 grid: stroke 1.4, round caps/joins,
+// currentColor — echoing the growth-rings logo. The marigold center dot appears
+// only on `savings` and `live` (brand accent, used sparingly). Paths are
+// functions so theme-dependent fills resolve at render time.
+const ICONS = {
+  close:    () => <path d="M6 6l8 8M14 6l-8 8"/>,
+  plus:     () => <path d="M10 4.5v11M4.5 10h11"/>,
+  check:    () => <path d="M5 10.5l3.2 3.2L15 6.8"/>,
+  chevron:  () => <path d="M5.5 8l4.5 4.5L14.5 8"/>,
+  sun:      () => <><circle cx="10" cy="10" r="3.4"/><path d="M10 2.8v2M10 15.2v2M2.8 10h2M15.2 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4"/></>,
+  moon:     () => <path d="M15.6 12.4A6.3 6.3 0 1 1 7.6 4.4a5.1 5.1 0 0 0 8 8Z"/>,
+  star:     () => <path d="M10 3.2l1.5 5.3 5.3 1.5-5.3 1.5L10 16.8l-1.5-5.3L3.2 10l5.3-1.5Z"/>,
+  info:     () => <><circle cx="10" cy="10" r="7"/><path d="M10 9.2v4"/><circle cx="10" cy="6.6" r="0.5" fill="currentColor" stroke="none"/></>,
+  live:     () => <><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="1.8" fill="currentColor" stroke="none"/></>,
+  dot:      () => <circle cx="10" cy="10" r="6.5"/>,
+  housing:  () => <path d="M4 9.8L10 4.4l6 5.4M5.6 8.6v6.9h8.8V8.6"/>,
+  food:     () => <><path d="M4.4 11.2h11.2a5.6 5.6 0 0 1-11.2 0Z"/><path d="M8.2 8.6c0-1 .9-1.2.9-2.2M11.1 8.6c0-1 .9-1.2.9-2.2"/></>,
+  transport:() => <><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="2.1"/><path d="M10 3.5v4M10 12.5v4M3.5 10h4M12.5 10h4"/></>,
+  personal: () => <path d="M10 16.2s-5.6-3.5-5.6-7.2A3.2 3.2 0 0 1 10 6.8a3.2 3.2 0 0 1 5.6 2.2c0 3.7-5.6 7.2-5.6 7.2Z"/>,
+  books:    () => <path d="M10 5.6C8.4 4.2 6 4.2 4.2 4.7V15c1.8-.5 4.2-.4 5.8 1 1.6-1.4 4-1.5 5.8-1V4.7C14 4.2 11.6 4.2 10 5.6ZM10 5.6V16"/>,
+  exams:    () => <><rect x="5" y="4.6" width="10" height="12" rx="1.4"/><path d="M7.6 3.4h4.8v2.4H7.6Z" fill="var(--bg)"/><path d="M7.6 11l1.7 1.7 3.1-3.6"/></>,
+  savings:  (marigold) => <><circle cx="10" cy="10" r="6.6"/><path d="M10 6.4a3.6 3.6 0 1 0 3.6 3.6"/><circle cx="10" cy="10" r="1.3" fill={marigold} stroke="none"/></>,
+  social:   () => <><circle cx="7.4" cy="10" r="4.6"/><circle cx="12.6" cy="10" r="4.6"/></>,
+  subs:     () => <><path d="M15.9 10.6a6 6 0 1 1-1.7-4.8"/><path d="M16.2 3.6v2.6h-2.6"/></>,
+};
+const Icon = ({name, size=16, color="currentColor", strokeWidth=1.4, style}) => {
+  const draw = ICONS[name] || ICONS.dot;  // unknown ids (custom categories) → plain ring
+  return <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color}
+    strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
+    style={{flexShrink:0, ...style}} aria-hidden="true">{draw(C.marigold)}</svg>;
 };
 
 // ── Year configs ──────────────────────────────────────────────────────────────
@@ -937,7 +964,7 @@ const YrBtn = ({yr, active, onClick}) => (
     transition:"all .15s",
   }}>
     {yr.label.split("—")[0].trim()}
-    {yr.type==="extended" ? " ★" : ""}
+    {yr.type==="extended" ? <Icon name="star" size={9} style={{marginLeft:3,verticalAlign:"-1px"}}/> : ""}
     {yr.startDate && <span style={{display:"block",fontSize:9,color:"inherit",opacity:0.7,marginTop:1}}>{new Date(yr.startDate+"T12:00:00").toLocaleDateString("en-US",{month:"short"})} ’{new Date(yr.startDate+"T12:00:00").toLocaleDateString("en-US",{year:"2-digit"})} – {new Date(yr.endDate+"T12:00:00").toLocaleDateString("en-US",{month:"short"})} ’{new Date(yr.endDate+"T12:00:00").toLocaleDateString("en-US",{year:"2-digit"})}</span>}
   </button>
 );
@@ -953,7 +980,7 @@ const Banner = ({children, type="info", onClose}) => {
   return (
     <div style={{background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:12, color:s.color, display:"flex", gap:10, alignItems:"flex-start", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)"}}>
       <div style={{flex:1, lineHeight:1.6}}>{children}</div>
-      {onClose && <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}>×</button>}
+      {onClose && <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}><Icon name="close" size={13}/></button>}
     </div>
   );
 };
@@ -963,7 +990,7 @@ const Modal = ({title, onClose, children, width=440}) => (
     <div onClick={e=>e.stopPropagation()} className="mm" style={{padding:"24px",maxWidth:width,width:"calc(100% - 32px)",maxHeight:"90vh",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div style={{fontWeight:700,fontSize:16,color:C.text}}>{title}</div>
-        <button onClick={onClose} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.14)",cursor:"pointer",width:28,height:28,borderRadius:8,fontSize:18,color:C.textMid,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,transition:"background 0.15s"}}><span style={{marginTop:-1}}>×</span></button>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.14)",cursor:"pointer",width:28,height:28,borderRadius:8,fontSize:18,color:C.textMid,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,transition:"background 0.15s"}}><Icon name="close" size={14}/></button>
       </div>
       {children}
     </div>
@@ -2204,7 +2231,7 @@ function App() {
           {syncStatus==="offline"  && <span style={{fontSize:11,color:C.amber,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>Offline</span>}
           {syncStatus==="conflict" && <span style={{fontSize:11,color:C.neg,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.neg,flexShrink:0}}/>Conflict</span>}
           {flash && <span style={{fontSize:12,color:C.teal,fontWeight:600}}>Saved</span>}
-          <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}} title="Toggle dark mode">{data.darkMode?"☀️":"🌙"}</button>
+          <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer",color:C.textMid,display:"inline-flex",alignItems:"center"}} title="Toggle theme">{<Icon name={data.darkMode?"sun":"moon"} size={16}/>}</button>
           <button onClick={()=>setConfirmReset(true)} style={{fontSize:11,padding:"5px 12px",border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>Reset defaults</button>
         </div>
       </div>
@@ -2301,7 +2328,7 @@ function App() {
                   onDrop={e=>{e.preventDefault();if(dragCat)reorderCats(dragCat,cat.id);setDragCat(null);setDragOverCat(null);}}
                   style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`,opacity:dragCat===cat.id?0.4:1,borderTop:dragOverCat===cat.id?`2px solid ${C.sel}`:"2px solid transparent",cursor:isAuto?"default":"grab",background:dragOverCat===cat.id?C.bgDark:"transparent"}}>
                   {!isAuto && <span style={{color:C.gray,fontSize:12,cursor:"grab",userSelect:"none"}} title="Drag to reorder">⠿</span>}
-                  <div style={{width:6,height:6,borderRadius:99,background:CHART_COLORS[i%CHART_COLORS.length],flexShrink:0,boxShadow:"0 0 0 1px rgba(255,255,255,0.28)"}}/>
+                  <Icon name={cat.id} size={14} color={CHART_COLORS[i%CHART_COLORS.length]}/>
                   <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                   {isAuto
                     ? <span style={{fontSize:13,fontWeight:600,color:C.blue,minWidth:72,textAlign:"right"}}>{fmt(amt)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> auto</span></span>
@@ -2309,7 +2336,7 @@ function App() {
                         style={{width:80,textAlign:"right",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",background:C.bg,color:C.text,fontWeight:600}}/>
                   }
                   <span style={{fontSize:10,color:C.gray,width:28,textAlign:"right"}}>{pct}%</span>
-                  {!isAuto && <button aria-label={"Remove "+cat.label} onClick={()=>setConfirmRemove(cat.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:C.textMid,flexShrink:0,opacity:0.85}} title={"Remove for "+MONTH_NAMES[selMonth]}>✕</button>}
+                  {!isAuto && <button aria-label={"Remove "+cat.label} onClick={()=>setConfirmRemove(cat.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:C.textMid,flexShrink:0,opacity:0.85}} title={"Remove for "+MONTH_NAMES[selMonth]}><Icon name="close" size={13}/></button>}
                 </div>
               );
             })}
@@ -2550,13 +2577,13 @@ function App() {
                   const cat=cats.find(c=>c.id===e.catId)||{label:"Other"};
                   return (
                     <div key={e.id} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{width:8,height:8,borderRadius:99,background:CHART_COLORS[cats.findIndex(c=>c.id===e.catId)%CHART_COLORS.length]||C.gray,flexShrink:0}}/>
+                      <Icon name={e.catId} size={14} color={CHART_COLORS[cats.findIndex(c=>c.id===e.catId)%CHART_COLORS.length]||C.gray}/>
                       <div style={{flex:1}}>
                         <div style={{fontSize:13,fontWeight:500,color:C.text}}>{cat.label}</div>
                         <div style={{fontSize:11,color:C.gray,marginTop:1}}>{e.date}{e.note?" · "+e.note:""}</div>
                       </div>
                       <span style={{fontWeight:700,fontSize:13,color:C.text}}>{fmtA(e.amount)}</span>
-                      <button aria-label="Delete entry" onClick={()=>delEntry(e.id,!!viewWeek)} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
+                      <button aria-label="Delete entry" onClick={()=>delEntry(e.id,!!viewWeek)} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}><Icon name="close" size={13}/></button>
                     </div>
                   );
                 })
@@ -3113,7 +3140,7 @@ function App() {
                         const slEntry=(d.savingsLog||[]).find(s=>s.id===entry.id);
                         reverseDepositGroup(d, slEntry);
                         upd(d);
-                      }} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
+                      }} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}><Icon name="close" size={13}/></button>
                     </div>
                   );
                 })
@@ -3141,7 +3168,7 @@ function App() {
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <Pill ok={funded} warn={!funded&&pct<50}>{pct}%</Pill>
                         {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
-                        <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>×</button>
+                        <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer"}}><Icon name="close" size={13}/></button>
                       </div>
                     </div>
                     <ProgressBar value={g.saved||0} max={g.targetAmount} color={funded?C.green:CHART_COLORS[(gi+2)%CHART_COLORS.length]}/>
@@ -3323,7 +3350,7 @@ function App() {
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <Pill ok={moS>=0} warn={moS<0}>{fmtS(moS)}/mo</Pill>
-                      {data.years.length>1 && <button onClick={()=>setConfirmYearRemove(y.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMid,cursor:"pointer",fontSize:12,flexShrink:0,opacity:0.85}} title="Remove year">✕</button>}
+                      {data.years.length>1 && <button onClick={()=>setConfirmYearRemove(y.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMid,cursor:"pointer",fontSize:12,flexShrink:0,opacity:0.85}} title="Remove year"><Icon name="close" size={13}/></button>}
                     </div>
                   </div>
                   {y.type==="extended" && <Banner type="warn">Extended year: tuition waived, fees only</Banner>}
@@ -3555,7 +3582,7 @@ function App() {
             <SectionTitle>Spending categories</SectionTitle>
             {cats.map(cat=>(
               <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
-                <div style={{width:8,height:8,borderRadius:99,background:CHART_COLORS[cats.findIndex(c=>c.id===cat.id)%CHART_COLORS.length],flexShrink:0,boxShadow:"0 0 0 1px rgba(255,255,255,0.28)"}}/>
+                <Icon name={cat.id} size={14} color={CHART_COLORS[cats.findIndex(c=>c.id===cat.id)%CHART_COLORS.length]}/>
                 <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                 {cat.locked && <span style={{fontSize:11,color:C.gray,background:C.surface,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:8}}>Fixed</span>}
                 {cat.autoCalc && <span style={{fontSize:11,color:C.blue,background:C.blueLight,padding:"2px 8px",borderRadius:8}}>Auto</span>}
