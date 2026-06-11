@@ -15,43 +15,73 @@
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;500;600;700&family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link rel="apple-touch-icon" href="icon.svg"/>
 <style>
+  /* ── Theme variables (mirrored subset of the JS THEMES object — keep in sync) ── */
+  :root {
+    --bg: #0b1611;
+    --text: #F6EFDD;
+    --text-dim: rgba(246,239,221,0.5);
+    --text-faint: rgba(246,239,221,0.38);
+    --text-soft: rgba(246,239,221,0.45);
+    --input-bg: rgba(255,255,255,0.08);
+    --input-border: rgba(255,255,255,0.14);
+    --input-focus-bg: rgba(255,255,255,0.12);
+    --input-focus-border: rgba(246,239,221,0.45);
+    --focus-glow: rgba(98,181,138,0.28);
+    --focus-ring: rgba(98,181,138,0.85);
+    --accent: #62B58A;
+    --color-scheme: dark;
+    --date-icon-filter: invert(0.85) sepia(0.15) saturate(0.4) brightness(1.05);
+    --select-caret: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23F6EFDD' stroke-opacity='0.55' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    --glass-card: rgba(246,239,221,0.07);
+    --glass-card-fallback: #132218;
+    --glass-card-border: rgba(255,255,255,0.20);
+    --glass-card-border-fallback: rgba(255,255,255,0.18);
+    --glass-primary: rgba(246,239,221,0.12);
+    --glass-primary-border: rgba(255,255,255,0.28);
+    --glass-modal: rgba(246,239,221,0.09);
+    --glass-modal-fallback: #1a2e22;
+    --blob1-a: #4A9068; --blob1-b: #1E3A2F;
+    --blob2-a: #5EAD80; --blob2-b: #2D5040;
+    --blob3-a: #3A7A58; --blob3-b: #0f2218;
+    --blob4-a: #4A9068; --blob4-b: #1A3828;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #0b1611; color: #F6EFDD; transition: background .3s; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); transition: background .3s; }
   #root { min-height: 100vh; background: transparent; position: relative; z-index: 1; }
-  #loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-size: 14px; color: rgba(246,239,221,0.5); font-family: 'Inter', system-ui, sans-serif; }
-  input, select, textarea { color-scheme: dark; }
+  #loading { display: flex; align-items: center; justify-content: center; height: 100vh; font-size: 14px; color: var(--text-dim); font-family: 'Inter', system-ui, sans-serif; }
+  input, select, textarea { color-scheme: var(--color-scheme); }
   /* ── Glass inputs — override all inline background:C.bg on form controls ── */
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   select, textarea {
-    background: rgba(255,255,255,0.08) !important;
-    border-color: rgba(255,255,255,0.14) !important;
-    color: #F6EFDD !important;
+    background: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+    color: var(--text) !important;
   }
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
   select:focus, textarea:focus {
     outline: none !important;
-    border-color: rgba(246,239,221,0.45) !important;
-    background: rgba(255,255,255,0.12) !important;
-    box-shadow: 0 0 0 3px rgba(98,181,138,0.28) !important;
+    border-color: var(--input-focus-border) !important;
+    background: var(--input-focus-bg) !important;
+    box-shadow: 0 0 0 3px var(--focus-glow) !important;
   }
   /* Consistent placeholder treatment everywhere */
-  input::placeholder, textarea::placeholder { color: rgba(246,239,221,0.38) !important; opacity: 1; }
+  input::placeholder, textarea::placeholder { color: var(--text-faint) !important; opacity: 1; }
   /* Remove legacy number-input spinner arrows (Chrome/Safari + Firefox) */
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* Soften the native date-picker calendar icon so it reads as part of the UI, not a stock browser control */
   input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.85) sepia(0.15) saturate(0.4) brightness(1.05);
+    filter: var(--date-icon-filter);
     opacity: 0.5; cursor: pointer; transition: opacity .15s;
   }
   input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.85; }
   /* Date field text reads as part of the UI, not a stock browser control */
-  input[type="date"]::-webkit-datetime-edit { color: #F6EFDD; }
-  input[type="date"]::-webkit-datetime-edit-fields-wrapper { color: #F6EFDD; }
-  input[type="date"]::-webkit-datetime-edit-text { color: rgba(246,239,221,0.45); padding: 0 1px; }
+  input[type="date"]::-webkit-datetime-edit { color: var(--text); }
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper { color: var(--text); }
+  input[type="date"]::-webkit-datetime-edit-text { color: var(--text-soft); padding: 0 1px; }
   /* Empty (unset) date fields render as muted placeholders */
-  input[type="date"]:invalid::-webkit-datetime-edit { color: rgba(246,239,221,0.38); }
+  input[type="date"]:invalid::-webkit-datetime-edit { color: var(--text-faint); }
 
   /* Tooltip entrance — short, origin-aware (Emil) */
   @keyframes tipIn {
@@ -61,21 +91,21 @@
   /* Native select: drop OS chrome, add one consistent caret */
   select {
     -webkit-appearance: none; -moz-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23F6EFDD' stroke-opacity='0.55' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>") !important;
+    background-image: var(--select-caret) !important;
     background-repeat: no-repeat !important;
     background-position: right 10px center !important;
     padding-right: 28px !important;
   }
   /* One unified keyboard-focus ring for buttons & interactive controls */
   button:focus-visible, [role="button"]:focus-visible, a:focus-visible, summary:focus-visible {
-    outline: 2px solid rgba(98,181,138,0.85);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
     border-radius: 8px;
   }
   /* Mouse clicks shouldn't show the ring (only keyboard) */
   button:focus:not(:focus-visible) { outline: none; }
   /* Checkboxes/radios pick up the brand tint instead of OS blue */
-  input[type="checkbox"], input[type="radio"] { accent-color: #62B58A; cursor: pointer; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
 
   /* Tab bar: hide scrollbar; on narrow screens fade the right edge to hint more tabs */
   .tabbar { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -97,22 +127,22 @@
   }
   .blob-1 {
     width: 700px; height: 700px; top: -180px; left: -200px;
-    background: radial-gradient(circle, #4A9068 0%, #1E3A2F 65%);
+    background: radial-gradient(circle, var(--blob1-a) 0%, var(--blob1-b) 65%);
     animation: blobFloat1 21s ease-in-out infinite;
   }
   .blob-2 {
     width: 560px; height: 560px; top: 8%; right: -160px;
-    background: radial-gradient(circle, #5EAD80 0%, #2D5040 60%);
+    background: radial-gradient(circle, var(--blob2-a) 0%, var(--blob2-b) 60%);
     animation: blobFloat2 25s ease-in-out infinite;
   }
   .blob-3 {
     width: 520px; height: 520px; bottom: 10%; left: 3%;
-    background: radial-gradient(circle, #3A7A58 0%, #0f2218 70%);
+    background: radial-gradient(circle, var(--blob3-a) 0%, var(--blob3-b) 70%);
     animation: blobFloat3 19s ease-in-out infinite;
   }
   .blob-4 {
     width: 420px; height: 420px; bottom: -80px; right: 6%;
-    background: radial-gradient(circle, #4A9068 0%, #1A3828 70%);
+    background: radial-gradient(circle, var(--blob4-a) 0%, var(--blob4-b) 70%);
     animation: blobFloat4 23s ease-in-out infinite;
   }
   @keyframes blobFloat1 {
@@ -142,8 +172,8 @@
     to   { opacity:1; transform:scale(1)    translateY(0);   }
   }
   .mc {
-    background: #132218;
-    border: 1px solid rgba(255,255,255,0.18);
+    background: var(--glass-card-fallback);
+    border: 1px solid var(--glass-card-border-fallback);
     border-radius: 22px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12);
     transition: transform 260ms cubic-bezier(0.23,1,0.32,1), opacity 260ms ease;
@@ -152,15 +182,15 @@
   }
   @supports (backdrop-filter: blur(1px)) {
     .mc {
-      background: rgba(246,239,221,0.07);
+      background: var(--glass-card);
       backdrop-filter: blur(40px) saturate(180%) brightness(1.08);
       -webkit-backdrop-filter: blur(40px) saturate(180%) brightness(1.08);
-      border-color: rgba(255,255,255,0.20);
+      border-color: var(--glass-card-border);
       box-shadow: 0 8px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.10);
     }
     .mc-p {
-      background: rgba(246,239,221,0.12) !important;
-      border-color: rgba(255,255,255,0.28) !important;
+      background: var(--glass-primary) !important;
+      border-color: var(--glass-primary-border) !important;
     }
   }
   @media (hover: hover) and (pointer: fine) {
@@ -182,14 +212,14 @@
   }
   /* ── Glass modal panel ── */
   .mm {
-    background: #1a2e22;
-    border: 1px solid rgba(255,255,255,0.18);
-    border-radius: 20px;
+    background: var(--glass-modal-fallback);
+    border: 1px solid var(--glass-card-border-fallback);
+    border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.50);
   }
   @supports (backdrop-filter: blur(1px)) {
     .mm {
-      background: rgba(246,239,221,0.09);
+      background: var(--glass-modal);
       backdrop-filter: blur(50px) saturate(200%) brightness(1.08);
       -webkit-backdrop-filter: blur(50px) saturate(200%) brightness(1.08);
       border-color: rgba(255,255,255,0.22);
@@ -400,53 +430,78 @@ const { useState, useEffect, useCallback } = React;
 // recharts loaded above
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-// Marro design system — always dark, single theme
-const C = {
-  // Backgrounds
-  bg:         "#0b1611",
-  bgDark:     "#0d1e17",
-  white:      "#132218",
-  surface:    "rgba(255,255,255,0.06)",   // inner panels, sub-tiles, non-card containers
-  surfaceMid: "rgba(255,255,255,0.10)",   // slightly elevated surface (hover, active)
-  glassTooltip: "rgba(11,22,17,0.88)",   // dark glass for chart tooltips + dropdowns
-  // Text
-  text:       "#F6EFDD",
-  textMid:    "rgba(246,239,221,0.65)",
-  gray:       "rgba(246,239,221,0.52)",
-  // Borders
-  border:     "rgba(255,255,255,0.12)",
-  borderDark: "rgba(255,255,255,0.20)",
-  // Negative / over-budget / destructive — warm clay "danger" (distinct from green, but not an alarm-red)
-  red:        "#E08A6B",
-  redLight:   "rgba(224,138,107,0.18)",
-  redMid:     "rgba(224,138,107,0.40)",
-  // Positive / surplus / on-track — readable sage (brightened for contrast on dark glass)
-  teal:       "#62B58A",
-  tealLight:  "rgba(98,181,138,0.16)",
-  tealMid:    "rgba(98,181,138,0.34)",
-  green:      "#62B58A",
-  greenLight: "rgba(98,181,138,0.16)",
-  greenMid:   "rgba(98,181,138,0.34)",
-  // Info — distinct cool steel-blue, clearly separate from positive green
-  blue:       "#86B2CC",
-  blueLight:  "rgba(134,178,204,0.16)",
-  blueMid:    "rgba(134,178,204,0.32)",
-  // Milestone / warning — marigold
-  amber:      "#DDA528",
-  amberLight: "rgba(221,165,40,0.15)",
-  amberMid:   "rgba(221,165,40,0.30)",
-  purple:     "#DDA528",
-  purpleLight:"rgba(221,165,40,0.15)",
-  // Brand tokens
-  ink:        "#1E3A2F",
-  sage:       "#3E6B52",
-  cream:      "#F6EFDD",
-  marigold:   "#DDA528",
-  lowTide:    "#7C8471",
+// Theme-swappable: C is assigned from THEMES[theme]; toggling does
+// Object.assign(C, THEMES[next]) + a state update so every inline ref recomputes.
+// The <style> block mirrors a subset as CSS custom properties (--bg etc.) —
+// keep both in sync (documented in docs/DESIGN_SYSTEM.md).
+const THEMES = {
+  dark: {
+    // Backgrounds
+    bg:         "#0b1611",
+    bgDark:     "#0d1e17",
+    white:      "#132218",                  // glass-card fallback surface (legacy key name)
+    surface:    "rgba(255,255,255,0.06)",   // inner panels, sub-tiles, non-card containers
+    surfaceMid: "rgba(255,255,255,0.10)",   // slightly elevated surface (hover, active)
+    glassTooltip: "rgba(11,22,17,0.88)",    // dark glass for chart tooltips + dropdowns
+    glassCard:  "rgba(246,239,221,0.07)",   // inline glass surfaces (mirrors --glass-card)
+    scrim:      "rgba(0,0,0,0.65)",         // modal overlay backdrop
+    // Selection / active states — cream, never a semantic hue (rule: selection ≠ danger)
+    sel:        "rgba(246,239,221,0.75)",   // selected border
+    selBg:      "rgba(246,239,221,0.14)",   // selected fill
+    tabActiveBg:"rgba(246,239,221,0.92)",   // active tab pill
+    tabMuted:   "rgba(246,239,221,0.50)",   // inactive tab text
+    creamSoft:  "rgba(246,239,221,0.16)",   // soft filled secondary buttons
+    // Text
+    text:       "#F6EFDD",
+    textMid:    "rgba(246,239,221,0.65)",
+    gray:       "rgba(246,239,221,0.52)",
+    // Borders
+    border:     "rgba(255,255,255,0.12)",
+    borderDark: "rgba(255,255,255,0.20)",
+    // Destructive / errors ONLY (delete, reset, error banners) — warm clay
+    danger:      "#E08A6B",
+    dangerLight: "rgba(224,138,107,0.18)",
+    dangerMid:   "rgba(224,138,107,0.40)",
+    // Negative DATA (over-budget, deficits, actual-vs-plan series) — distinct meaning from danger
+    neg:        "#E08A6B",
+    negLight:   "rgba(224,138,107,0.18)",
+    negMid:     "rgba(224,138,107,0.40)",
+    // Positive / surplus / on-track
+    teal:       "#62B58A",
+    tealLight:  "rgba(98,181,138,0.16)",
+    tealMid:    "rgba(98,181,138,0.34)",
+    green:      "#62B58A",
+    greenLight: "rgba(98,181,138,0.16)",
+    greenMid:   "rgba(98,181,138,0.34)",
+    // Info banners/chips
+    blue:       "#86B2CC",
+    blueLight:  "rgba(134,178,204,0.16)",
+    blueMid:    "rgba(134,178,204,0.32)",
+    // Milestone / warning — marigold
+    amber:      "#DDA528",
+    amberLight: "rgba(221,165,40,0.15)",
+    amberMid:   "rgba(221,165,40,0.30)",
+    purple:     "#DDA528",
+    purpleLight:"rgba(221,165,40,0.15)",
+    // Brand tokens
+    ink:        "#1E3A2F",
+    sage:       "#3E6B52",
+    cream:      "#F6EFDD",
+    marigold:   "#DDA528",
+    lowTide:    "#7C8471",
+    // Ordered so NO two neighbours (incl. the wrap from last→first) share a hue family
+    chartColors: ["#62B58A","#DDA528","#86B2CC","#7C8471","#B6C7AE","#C8A84B","#4A9068","#F6EFDD","#5A9A72","#8FB89A"],
+  },
 };
-// Ordered so NO two neighbours (incl. the wrap from last→first) share a hue family:
-// green → gold → steel-blue → tan → pale-sage → ochre → mid-green → cream → green → pale-sage
-const CHART_COLORS = ["#62B58A","#DDA528","#86B2CC","#7C8471","#B6C7AE","#C8A84B","#4A9068","#F6EFDD","#5A9A72","#8FB89A"];
+const C = {...THEMES.dark};
+const CHART_COLORS = [...THEMES.dark.chartColors];
+// Shared Recharts tooltip styling (G3 glass tier). A function, not a constant:
+// C mutates on theme swap, so styles must be rebuilt per render.
+const tipProps = () => ({
+  labelStyle:{color:C.text},
+  itemStyle:{color:C.text},
+  contentStyle:{background:C.glassTooltip,color:C.text,border:`1px solid ${C.borderDark}`,borderRadius:12,fontSize:12,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"},
+});
 
 // ── SVG brand icons (inline, no external deps) ────────────────────────────────
 // Each returns an SVG path + color so BrandIcon renders a clean colored tile
@@ -705,8 +760,8 @@ const getYearMonthStr = (date) => {
 
 // ── UI Atoms ──────────────────────────────────────────────────────────────────
 const Pill = ({ok, warn, neutral, children, sm}) => {
-  const bg = neutral ? C.bgDark : ok ? C.greenLight : warn ? C.amberLight : C.redLight;
-  const color = neutral ? C.gray : ok ? C.green : warn ? C.amber : C.red;
+  const bg = neutral ? C.bgDark : ok ? C.greenLight : warn ? C.amberLight : C.negLight;
+  const color = neutral ? C.gray : ok ? C.green : warn ? C.amber : C.neg;
   return (
     <span style={{
       fontSize: sm?10:11, padding: sm?"1px 7px":"2px 9px",
@@ -739,24 +794,24 @@ const TabBtn = ({label, active, onClick, badge}) => (
   <button onClick={onClick} style={{
     padding:"7px 16px", border:"none",
     borderRadius:28,
-    background: active ? "rgba(246,239,221,0.92)" : "transparent",
+    background: active ? C.tabActiveBg : "transparent",
     cursor:"pointer", fontSize:13,
     fontWeight: active ? 600 : 400,
-    color: active ? C.ink : "rgba(246,239,221,0.50)",
+    color: active ? C.ink : C.tabMuted,
     whiteSpace:"nowrap", position:"relative", flexShrink:0,
     transition:"all 220ms cubic-bezier(0.23,1,0.32,1)",
     boxShadow: active ? "0 1px 8px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)" : "none",
   }}>
     {label}
-    {badge>0 && <span style={{position:"absolute",top:3,right:3,minWidth:14,height:14,borderRadius:7,background:C.marigold,color:C.ink,fontSize:8,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{badge}</span>}
+    {badge>0 && <span style={{position:"absolute",top:3,right:3,minWidth:14,height:14,borderRadius:8,background:C.marigold,color:C.ink,fontSize:8,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{badge}</span>}
   </button>
 );
 
 const YrBtn = ({yr, active, onClick}) => (
   <button onClick={onClick} style={{
     padding:"5px 14px", borderRadius:8,
-    border: active ? `1.5px solid rgba(246,239,221,0.75)` : `1.5px solid ${C.border}`,
-    background: active ? "rgba(246,239,221,0.14)" : "transparent",
+    border: active ? `1.5px solid ${C.sel}` : `1.5px solid ${C.border}`,
+    background: active ? C.selBg : "transparent",
     color: active ? C.text : C.gray,
     fontWeight: active?600:400, fontSize:12, cursor:"pointer",
     transition:"all .15s",
@@ -772,11 +827,11 @@ const Banner = ({children, type="info", onClose}) => {
     info:    {bg:"rgba(134,178,204,0.12)", color:C.blue, border:"rgba(134,178,204,0.30)"},
     warn:    {bg:C.amberLight, color:C.amber, border:C.amberMid},
     success: {bg:C.greenLight, color:C.green, border:C.greenMid},
-    error:   {bg:C.redLight, color:C.red, border:C.redMid},
+    error:   {bg:C.dangerLight, color:C.danger, border:C.dangerMid},
   };
   const s = styles[type]||styles.info;
   return (
-    <div style={{background:s.bg, border:`1px solid ${s.border}`, borderRadius:10, padding:"10px 14px", marginBottom:10, fontSize:12, color:s.color, display:"flex", gap:10, alignItems:"flex-start", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)"}}>
+    <div style={{background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:12, color:s.color, display:"flex", gap:10, alignItems:"flex-start", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)"}}>
       <div style={{flex:1, lineHeight:1.6}}>{children}</div>
       {onClose && <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}>×</button>}
     </div>
@@ -784,7 +839,7 @@ const Banner = ({children, type="info", onClose}) => {
 };
 
 const Modal = ({title, onClose, children, width=440}) => (
-  <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)"}}>
+  <div onClick={onClose} style={{position:"fixed",inset:0,background:C.scrim,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)"}}>
     <div onClick={e=>e.stopPropagation()} className="mm" style={{padding:"24px",maxWidth:width,width:"calc(100% - 32px)",maxHeight:"90vh",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div style={{fontWeight:700,fontSize:16,color:C.text}}>{title}</div>
@@ -802,7 +857,7 @@ const InfoTip = ({text}) => {
   const close = () => { clearTimeout(timer.current); setShow(false); };
   return <span style={{position:"relative",display:"inline-flex"}} onMouseEnter={open} onMouseLeave={close} onClick={()=>setShow(s=>!s)}>
     <span style={{width:16,height:16,borderRadius:8,background:C.surface,color:C.gray,fontSize:9,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"help",border:`1px solid ${C.border}`}}>i</span>
-    {show && <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",transformOrigin:"bottom center",animation:"tipIn 140ms cubic-bezier(0.23,1,0.32,1)",background:C.glassTooltip,color:C.text,fontSize:11,padding:"6px 10px",borderRadius:8,whiteSpace:"normal",width:200,zIndex:999,lineHeight:1.5,boxShadow:"0 4px 16px rgba(0,0,0,0.32)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:"1px solid rgba(255,255,255,0.10)"}}>{text}</div>}
+    {show && <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",transformOrigin:"bottom center",animation:"tipIn 140ms cubic-bezier(0.23,1,0.32,1)",background:C.glassTooltip,color:C.text,fontSize:11,padding:"6px 10px",borderRadius:8,whiteSpace:"normal",width:200,zIndex:999,lineHeight:1.5,boxShadow:"0 4px 16px rgba(0,0,0,0.32)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${C.border}`}}>{text}</div>}
   </span>;
 };
 
@@ -828,10 +883,10 @@ const Divider = () => <div style={{height:1,background:C.border,margin:"10px 0"}
 const MetricTile = ({label, value, sub, color, onClick}) => (
   <div onClick={onClick} style={{
     background:"rgba(255,255,255,0.07)",
-    backdropFilter:"blur(30px) saturate(160%)",
+    backdropFilter:"blur(40px) saturate(180%)",
     WebkitBackdropFilter:"blur(30px) saturate(160%)",
     border:"1px solid rgba(255,255,255,0.14)",
-    borderRadius:14, padding:"14px 16px", flex:1, minWidth:130,
+    borderRadius:12, padding:"14px 16px", flex:1, minWidth:130,
     cursor:onClick?"pointer":"default",
     transition:"all 200ms cubic-bezier(0.23,1,0.32,1)",
     boxShadow:"0 4px 16px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.12)",
@@ -872,7 +927,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
   const [newDate, setNewDate] = useState(nextCycleDate);
   return (
     <Modal title="Handle renewal" onClose={onClose}>
-      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:20}}>
         <BrandIcon name={sub.name} size={40}/>
         <div>
           <div style={{fontWeight:600,fontSize:14}}>{sub.name}</div>
@@ -882,7 +937,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
       <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}>Did you renew?</div>
       <div style={{display:"flex",gap:8,marginBottom:20}}>
         {[{v:true,label:"Yes, keeping it"},{v:false,label:"No, cancelled"}].map(o=>(
-          <button key={String(o.v)} onClick={()=>setRenewed(o.v)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`2px solid ${renewed===o.v?(o.v?C.teal:C.red):C.border}`,borderRadius:10,background:renewed===o.v?(o.v?C.tealLight:C.redLight):"transparent",color:renewed===o.v?(o.v?C.teal:C.red):C.gray,cursor:"pointer",transition:"all .15s"}}>
+          <button key={String(o.v)} onClick={()=>setRenewed(o.v)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`2px solid ${renewed===o.v?(o.v?C.teal:C.danger):C.border}`,borderRadius:8,background:renewed===o.v?(o.v?C.tealLight:C.dangerLight):"transparent",color:renewed===o.v?(o.v?C.teal:C.danger):C.gray,cursor:"pointer",transition:"all .15s"}}>
             {o.label}
           </button>
         ))}
@@ -907,7 +962,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
       </>}
       {renewed===false && <Banner type="warn" style={{marginBottom:16}}>This subscription will be removed and your budget updated automatically.</Banner>}
       {renewed !== null && (
-        <button onClick={()=>onConfirm(sub,renewed,samePrice?sub.amount:newAmt,newDate)} style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,border:"none",borderRadius:10,background:renewed?C.teal:C.red,color:C.bg,cursor:"pointer"}}>
+        <button onClick={()=>onConfirm(sub,renewed,samePrice?sub.amount:newAmt,newDate)} style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,border:"none",borderRadius:8,background:renewed?C.teal:C.danger,color:C.bg,cursor:"pointer"}}>
           {renewed ? "Save subscription" : "Remove subscription"}
         </button>
       )}
@@ -926,8 +981,8 @@ function WeekSelectorModal({archives, currentWeekStart, currentWeekEnd, selected
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {allWeeks.map(w=>(
           <button key={w.weekStart} onClick={()=>{onSelect(w.isCurrent?null:w.weekStart);onClose();}} style={{
-            padding:"10px 14px",borderRadius:10,border:`1.5px solid ${(!selected&&w.isCurrent)||(selected===w.weekStart)?"rgba(246,239,221,0.75)":C.border}`,
-            background:(!selected&&w.isCurrent)||(selected===w.weekStart)?"rgba(246,239,221,0.14)":"transparent",
+            padding:"10px 14px",borderRadius:8,border:`1.5px solid ${(!selected&&w.isCurrent)||(selected===w.weekStart)?C.sel:C.border}`,
+            background:(!selected&&w.isCurrent)||(selected===w.weekStart)?C.selBg:"transparent",
             color:(!selected&&w.isCurrent)||(selected===w.weekStart)?C.text:C.text,
             cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",
             fontWeight:(!selected&&w.isCurrent)||(selected===w.weekStart)?600:400,fontSize:13,
@@ -952,14 +1007,14 @@ function ConflictModal({pending, data, onResolve}) {
   };
   const autoCount=Object.keys(pending.mergeLocal).length+Object.keys(pending.mergeServer).length;
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16,backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}>
+    <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16,backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}>
       <div className="mm" style={{padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto'}}>
         <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>Sync conflict</div>
         <div style={{fontSize:13,color:C.textMid,marginBottom:18}}>
           The same {pending.conflicts.length===1?'item was':pending.conflicts.length+' items were'} changed on two devices. Pick which version to keep.
         </div>
         {pending.conflicts.map(c=>(
-          <div key={c.key} style={{marginBottom:12,padding:12,borderRadius:10,background:C.surface,border:`1px solid ${C.border}`}}>
+          <div key={c.key} style={{marginBottom:12,padding:12,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:10}}>{conflictLabel(c.key,data)}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               {[['local','This device',c.local],['server','Other device',c.server]].map(([side,label,val])=>(
@@ -974,7 +1029,7 @@ function ConflictModal({pending, data, onResolve}) {
         {autoCount>0&&<div style={{fontSize:11,color:C.gray,marginBottom:14,padding:'8px 12px',borderRadius:8,background:C.surface,border:`1px solid ${C.border}`}}>
           {autoCount} other change{autoCount>1?'s':''} on different items will be merged automatically — no action needed.
         </div>}
-        <button onClick={resolve} style={{width:'100%',padding:'12px',fontSize:14,fontWeight:700,border:'none',borderRadius:10,background:C.teal,color:'#fff',cursor:'pointer',marginTop:4}}>
+        <button onClick={resolve} style={{width:'100%',padding:'12px',fontSize:14,fontWeight:700,border:'none',borderRadius:8,background:C.teal,color:'#fff',cursor:'pointer',marginTop:4}}>
           Apply &amp; sync
         </button>
       </div>
@@ -1667,22 +1722,22 @@ function App() {
       {renewDlg && <RenewalDialog sub={renewDlg} onClose={()=>setRenewDlg(null)} onConfirm={handleRenewal}/>}
       {weeklyNotice && weeklyNotice.type==="warn" && <Modal title={weeklyNotice.month+" is over budget"} onClose={()=>setWeeklyNotice(null)} width={360}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.6}}>
-          {weeklyNotice.month} is now <strong style={{color:C.red}}>{fmt(weeklyNotice.deficit)}</strong> over your monthly income{weeklyNotice.cat?<>, after logging <strong>{weeklyNotice.cat}</strong></>:""}. This lowers your running balance and year-end net. Consider trimming a category or adjusting your budget.
+          {weeklyNotice.month} is now <strong style={{color:C.neg}}>{fmt(weeklyNotice.deficit)}</strong> over your monthly income{weeklyNotice.cat?<>, after logging <strong>{weeklyNotice.cat}</strong></>:""}. This lowers your running balance and year-end net. Consider trimming a category or adjusting your budget.
         </div>
-        <button onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.red,color:C.bg,cursor:"pointer"}}>Got it</button>
+        <button onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.neg,color:C.bg,cursor:"pointer"}}>Got it</button>
       </Modal>}
       {confirmReset && <Modal title="Reset everything?" onClose={()=>setConfirmReset(false)} width={350}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.6}}>This replaces <strong>all</strong> of your budget, weekly entries, savings, and subscriptions with the starting defaults. This cannot be undone.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirmReset(false)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:"rgba(246,239,221,0.16)",color:C.text,cursor:"pointer"}}>Cancel</button>
-          <button onClick={()=>{upd(JSON.parse(JSON.stringify(DEFAULT_STATE)));setConfirmReset(false);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.redMid}`,borderRadius:8,background:C.redLight,color:C.red,cursor:"pointer"}}>Reset everything</button>
+          <button onClick={()=>setConfirmReset(false)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>{upd(JSON.parse(JSON.stringify(DEFAULT_STATE)));setConfirmReset(false);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Reset everything</button>
         </div>
       </Modal>}
       {confirmYearRemove!==null && <Modal title="Remove year" onClose={()=>setConfirmYearRemove(null)} width={350}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{data.years.find(y=>y.id===confirmYearRemove)?.label}</strong>? This permanently deletes its budget data and cannot be undone.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirmYearRemove(null)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:"rgba(246,239,221,0.16)",color:C.text,cursor:"pointer"}}>Cancel</button>
-          <button onClick={()=>{removeYear(confirmYearRemove);setConfirmYearRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.redMid}`,borderRadius:8,background:C.redLight,color:C.red,cursor:"pointer"}}>Remove</button>
+          <button onClick={()=>setConfirmYearRemove(null)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>{removeYear(confirmYearRemove);setConfirmYearRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Remove</button>
         </div>
       </Modal>}
       {showAddYear && <Modal title="Add academic year" onClose={()=>setShowAddYear(false)} width={360}>
@@ -1700,7 +1755,7 @@ function App() {
       {confirmRemove && <Modal title="Remove category" onClose={()=>setConfirmRemove(null)} width={340}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{cats.find(c=>c.id===confirmRemove)?.label}</strong> from {MONTH_FULL[selMonth]}? You can add it back anytime.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{toggleMonthCat(confirmRemove);setConfirmRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.red,color:C.bg,cursor:"pointer"}}>Remove</button>
+          <button onClick={()=>{toggleMonthCat(confirmRemove);setConfirmRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.danger,color:C.bg,cursor:"pointer"}}>Remove</button>
           <button onClick={()=>setConfirmRemove(null)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:500,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
         </div>
       </Modal>}
@@ -1951,8 +2006,8 @@ function App() {
                 <div style={{fontSize:12,color:C.gray,lineHeight:1.6}}>
                   Export a CSV from your bank (Chase, BofA, etc.) and paste it below. Needs at least a <strong>Date</strong> and <strong>Amount</strong> column. A description column helps with auto-categorization.
                 </div>
-                <textarea value={csvText} onChange={e=>{setCsvText(e.target.value);setCsvError(null);}} placeholder={"Date,Description,Amount\n06/01/2026,GRUBHUB,-12.50\n06/02/2026,MTA TRANSIT,-2.90"} rows={10} style={{width:"100%",fontSize:12,border:`1px solid ${csvError?C.redMid:C.border}`,borderRadius:8,padding:"10px",background:C.bg,color:C.text,boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>
-                {csvError && <div role="alert" style={{fontSize:12,lineHeight:1.5,color:C.red,background:C.redLight,border:`1px solid ${C.redMid}`,borderRadius:8,padding:"8px 12px"}}>{csvError}</div>}
+                <textarea value={csvText} onChange={e=>{setCsvText(e.target.value);setCsvError(null);}} placeholder={"Date,Description,Amount\n06/01/2026,GRUBHUB,-12.50\n06/02/2026,MTA TRANSIT,-2.90"} rows={10} style={{width:"100%",fontSize:12,border:`1px solid ${csvError?C.negMid:C.border}`,borderRadius:8,padding:"10px",background:C.bg,color:C.text,boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>
+                {csvError && <div role="alert" style={{fontSize:12,lineHeight:1.5,color:C.danger,background:C.dangerLight,border:`1px solid ${C.dangerMid}`,borderRadius:8,padding:"8px 12px"}}>{csvError}</div>}
                 <button onClick={parseCSV} disabled={!csvText.trim()} style={{padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!csvText.trim()?C.surface:C.teal,color:!csvText.trim()?C.gray:C.bg,cursor:!csvText.trim()?"not-allowed":"pointer"}}>Parse transactions</button>
               </div>
             ) : (
@@ -1964,7 +2019,7 @@ function App() {
                 <div style={{maxHeight:360,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                     <thead>
-                      <tr style={{background:"rgba(11,22,17,0.90)",backdropFilter:"blur(10px)",position:"sticky",top:0}}>
+                      <tr style={{background:C.glassTooltip,backdropFilter:"blur(20px)",position:"sticky",top:0}}>
                         <th style={{padding:"8px 10px",textAlign:"left",color:C.gray,fontWeight:600,borderBottom:`1px solid ${C.border}`}}>✓</th>
                         <th style={{padding:"8px 10px",textAlign:"left",color:C.gray,fontWeight:600,borderBottom:`1px solid ${C.border}`}}>Date</th>
                         <th style={{padding:"8px 10px",textAlign:"left",color:C.gray,fontWeight:600,borderBottom:`1px solid ${C.border}`}}>Description</th>
@@ -1982,7 +2037,7 @@ function App() {
                           <td style={{padding:"6px 10px",borderBottom:`1px solid ${C.border}`,color:C.text,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.desc}</td>
                           <td style={{padding:"6px 10px",borderBottom:`1px solid ${C.border}`,color:C.text,textAlign:"right",fontWeight:600}}>{fmtA(row.amt)}</td>
                           <td style={{padding:"6px 10px",borderBottom:`1px solid ${C.border}`}}>
-                            <select value={row.catId} onChange={e=>{const r=[...csvRows];r[i]={...r[i],catId:e.target.value};setCsvRows(r);}} style={{fontSize:11,border:`1px solid ${row.catId?C.border:C.amber}`,borderRadius:5,padding:"3px 6px",background:C.bg,color:row.catId?C.text:C.amber,cursor:"pointer"}}>
+                            <select value={row.catId} onChange={e=>{const r=[...csvRows];r[i]={...r[i],catId:e.target.value};setCsvRows(r);}} style={{fontSize:11,border:`1px solid ${row.catId?C.border:C.amber}`,borderRadius:8,padding:"3px 6px",background:C.bg,color:row.catId?C.text:C.amber,cursor:"pointer"}}>
                               <option value="">— pick —</option>
                               {catOptions.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
                             </select>
@@ -2017,10 +2072,10 @@ function App() {
           {syncStatus==="syncing"  && <span style={{fontSize:11,color:C.gray,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,animation:"wcmpulse 1s infinite",flexShrink:0}}/>Syncing…</span>}
           {syncStatus==="synced"   && <span style={{fontSize:11,color:C.teal,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.teal,flexShrink:0}}/>Synced</span>}
           {syncStatus==="offline"  && <span style={{fontSize:11,color:C.amber,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>Offline</span>}
-          {syncStatus==="conflict" && <span style={{fontSize:11,color:C.red,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.red,flexShrink:0}}/>Conflict</span>}
+          {syncStatus==="conflict" && <span style={{fontSize:11,color:C.neg,display:"flex",alignItems:"center",gap:4}}><span style={{width:6,height:6,borderRadius:99,background:C.neg,flexShrink:0}}/>Conflict</span>}
           {flash && <span style={{fontSize:12,color:C.teal,fontWeight:600}}>Saved</span>}
-          <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",cursor:"pointer"}} title="Toggle dark mode">{data.darkMode?"☀️":"🌙"}</button>
-          <button onClick={()=>setConfirmReset(true)} style={{fontSize:11,padding:"5px 12px",border:`1px solid ${C.border}`,borderRadius:7,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>Reset defaults</button>
+          <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{fontSize:16,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}} title="Toggle dark mode">{data.darkMode?"☀️":"🌙"}</button>
+          <button onClick={()=>setConfirmReset(true)} style={{fontSize:11,padding:"5px 12px",border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>Reset defaults</button>
         </div>
       </div>
 
@@ -2038,7 +2093,7 @@ function App() {
       {renewalsDue.map(s=>(
         <Banner key={s.id} type="warn" onClose={()=>{let d=JSON.parse(JSON.stringify(data));d.subscriptions=d.subscriptions.map(x=>x.id===s.id?{...x,renewalPrompted:true}:x);upd(d);}}>
           <strong>{s.name}</strong> renewal date has passed.{" "}
-          <button onClick={()=>setRenewDlg(s)} style={{background:C.amber,color:"#fff",border:"none",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:11,fontWeight:600,marginLeft:6}}>Handle renewal</button>
+          <button onClick={()=>setRenewDlg(s)} style={{background:C.amber,color:"#fff",border:"none",borderRadius:8,padding:"2px 10px",cursor:"pointer",fontSize:11,fontWeight:600,marginLeft:6}}>Handle renewal</button>
         </Banner>
       ))}
       {renewalsSoon.filter(s=>!dismissed["rsu_"+s.id]).map(s=>(
@@ -2056,16 +2111,16 @@ function App() {
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <MetricTile label="Monthly spendable"  value={fmt(moSpendable)} sub="after tuition & fees" color={C.teal}/>
         <MetricTile label="Monthly plan"        value={fmt(moSpend)}     sub={subsMo>0?`incl. ${fmt(subsMo)} subs`:"planned spending"}/>
-        <MetricTile label="Monthly surplus"    value={fmtS(moSurplus)}  sub={moSurplus>0?"available to save":moSurplus<0?"over budget":"balanced"} color={moSurplus>0?C.green:moSurplus<0?C.red:C.gray}/>
-        <MetricTile label="Year net"           value={fmtS(curYrNet)}   sub="full 12 months" color={curYrNet>=0?C.green:C.red}/>
-        <MetricTile label="Total balance"    value={fmtS(totalAccumulatedBalance)} sub={"thru "+MONTH_NAMES[selMonth]+(priorYearsCarryover!==0?" · incl. prior yrs":"")} color={totalAccumulatedBalance>=0?C.teal:C.red}/>
+        <MetricTile label="Monthly surplus"    value={fmtS(moSurplus)}  sub={moSurplus>0?"available to save":moSurplus<0?"over budget":"balanced"} color={moSurplus>0?C.green:moSurplus<0?C.neg:C.gray}/>
+        <MetricTile label="Year net"           value={fmtS(curYrNet)}   sub="full 12 months" color={curYrNet>=0?C.green:C.neg}/>
+        <MetricTile label="Total balance"    value={fmtS(totalAccumulatedBalance)} sub={"thru "+MONTH_NAMES[selMonth]+(priorYearsCarryover!==0?" · incl. prior yrs":"")} color={totalAccumulatedBalance>=0?C.teal:C.neg}/>
       </div>
 
       {/* ── Tabs ── */}
       <div className="tabbar" style={{
         display:"flex", marginBottom:24, overflowX:"auto", gap:2, padding:"4px",
-        background:"rgba(246,239,221,0.07)",
-        backdropFilter:"blur(24px) saturate(150%)",
+        background:C.glassCard,
+        backdropFilter:"blur(40px) saturate(180%)",
         WebkitBackdropFilter:"blur(24px) saturate(150%)",
         border:"1px solid rgba(255,255,255,0.14)",
         borderRadius:32,
@@ -2088,7 +2143,7 @@ function App() {
           <Card>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <SectionTitle>Monthly plan</SectionTitle>
-              <select value={selMonth} onChange={e=>setSelMonth(Number(e.target.value))} style={{fontSize:12,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:7,background:C.bg,color:C.text,cursor:"pointer"}}>
+              <select value={selMonth} onChange={e=>setSelMonth(Number(e.target.value))} style={{fontSize:12,padding:"4px 10px",border:`1px solid ${C.border}`,borderRadius:8,background:C.bg,color:C.text,cursor:"pointer"}}>
                 {MONTH_NAMES.map((m,i)=><option key={m} value={i}>{MONTH_FULL[i]}</option>)}
               </select>
             </div>
@@ -2114,17 +2169,17 @@ function App() {
                   onDragEnd={()=>{setDragCat(null);setDragOverCat(null);}}
                   onDragOver={e=>{e.preventDefault();if(dragCat&&dragCat!==cat.id)setDragOverCat(cat.id);}}
                   onDrop={e=>{e.preventDefault();if(dragCat)reorderCats(dragCat,cat.id);setDragCat(null);setDragOverCat(null);}}
-                  style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`,opacity:dragCat===cat.id?0.4:1,borderTop:dragOverCat===cat.id?`2px solid ${C.red}`:"2px solid transparent",cursor:isAuto?"default":"grab",background:dragOverCat===cat.id?C.bgDark:"transparent"}}>
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${C.border}`,opacity:dragCat===cat.id?0.4:1,borderTop:dragOverCat===cat.id?`2px solid ${C.neg}`:"2px solid transparent",cursor:isAuto?"default":"grab",background:dragOverCat===cat.id?C.bgDark:"transparent"}}>
                   {!isAuto && <span style={{color:C.gray,fontSize:12,cursor:"grab",userSelect:"none"}} title="Drag to reorder">⠿</span>}
                   <div style={{width:6,height:6,borderRadius:99,background:CHART_COLORS[i%CHART_COLORS.length],flexShrink:0,boxShadow:"0 0 0 1px rgba(255,255,255,0.28)"}}/>
                   <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                   {isAuto
                     ? <span style={{fontSize:13,fontWeight:600,color:C.blue,minWidth:72,textAlign:"right"}}>{fmt(amt)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> auto</span></span>
                     : <input type="number" value={getMonthVal(cat.id)} onChange={e=>setMo(ay,cat.id,e.target.value)}
-                        style={{width:80,textAlign:"right",fontSize:13,border:`1px solid ${C.border}`,borderRadius:7,padding:"4px 8px",background:C.bg,color:C.text,fontWeight:600}}/>
+                        style={{width:80,textAlign:"right",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",background:C.bg,color:C.text,fontWeight:600}}/>
                   }
                   <span style={{fontSize:10,color:C.gray,width:28,textAlign:"right"}}>{pct}%</span>
-                  {!isAuto && <button aria-label={"Remove "+cat.label} onClick={()=>setConfirmRemove(cat.id)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:C.textMid,flexShrink:0,opacity:0.85}} title={"Remove for "+MONTH_NAMES[selMonth]}>✕</button>}
+                  {!isAuto && <button aria-label={"Remove "+cat.label} onClick={()=>setConfirmRemove(cat.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:C.textMid,flexShrink:0,opacity:0.85}} title={"Remove for "+MONTH_NAMES[selMonth]}>✕</button>}
                 </div>
               );
             })}
@@ -2133,11 +2188,11 @@ function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,fontWeight:700}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span>Total</span>
-<button onClick={()=>setShowAddCat(true)} style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
+<button onClick={()=>setShowAddCat(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:13,lineHeight:1}}>+</span> Add category
                 </button>
               </div>
-              <span style={{color:moSpend>moSpendable?C.red:C.text}}>{fmt(moSpend)}/mo</span>
+              <span style={{color:moSpend>moSpendable?C.neg:C.text}}>{fmt(moSpend)}/mo</span>
             </div>
             {subsMo>0 && <div style={{fontSize:11,color:C.blue,marginTop:6}}>{subs.filter(s=>s.active!==false).length} active subscription{subs.length!==1?"s":""} totalling {fmt(subsMo)}/mo — auto-calculated</div>}
 
@@ -2153,7 +2208,7 @@ function App() {
                     <div style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>
                     <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                     <span style={{fontSize:13,fontWeight:600,color:C.amber,minWidth:64,textAlign:"right"}}>{fmt(spent)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> spent</span></span>
-                    <button onClick={()=>promoteToBudget(cat.id)} style={{padding:"3px 10px",fontSize:11,fontWeight:600,border:`1px solid ${C.amberMid}`,borderRadius:6,background:C.amberLight,color:C.amber,cursor:"pointer",whiteSpace:"nowrap"}}>Add to budget</button>
+                    <button onClick={()=>promoteToBudget(cat.id)} style={{padding:"3px 10px",fontSize:11,fontWeight:600,border:`1px solid ${C.amberMid}`,borderRadius:8,background:C.amberLight,color:C.amber,cursor:"pointer",whiteSpace:"nowrap"}}>Add to budget</button>
                   </div>
                 );
               })}
@@ -2175,7 +2230,7 @@ function App() {
                 {l:"Other income",              v:fmt(annOther)+"/yr",       c:C.text},
                 {l:"Monthly spendable",         v:fmt(moSpendable)+"/mo",    c:C.teal,bold:true},
                 {l:"Monthly plan",              v:fmt(moSpend)+"/mo",        c:C.text},
-                {l:"Monthly surplus",           v:fmtS(moSurplus)+"/mo",     c:moSurplus>=0?C.green:C.red,bold:true},
+                {l:"Monthly surplus",           v:fmtS(moSurplus)+"/mo",     c:moSurplus>=0?C.green:C.neg,bold:true},
               ].map(r=>(
                 <div key={r.l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
                   <span style={{color:C.gray}}>{r.l}</span>
@@ -2184,10 +2239,10 @@ function App() {
               ))}
               <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 2px",fontSize:13,fontWeight:700}}>
                 <span>Running balance <span style={{fontSize:10,color:C.gray,fontWeight:400}}>through {MONTH_FULL[selMonth]}</span></span>
-                <span style={{color:runningBalance>=0?C.teal:C.red}}>{fmtS(runningBalance)}</span>
+                <span style={{color:runningBalance>=0?C.teal:C.neg}}>{fmtS(runningBalance)}</span>
               </div>
               {moSurplus!==0 && (
-                <div style={{marginTop:8,padding:"10px 12px",background:moSurplus>=0?C.greenLight:C.redLight,borderRadius:8,fontSize:12,color:moSurplus>=0?C.green:C.red,fontWeight:500}}>
+                <div style={{marginTop:8,padding:"10px 12px",background:moSurplus>=0?C.greenLight:C.negLight,borderRadius:8,fontSize:12,color:moSurplus>=0?C.green:C.neg,fontWeight:500}}>
                   {moSurplus>=0
                     ? `${fmt(moSurplus)} surplus this month — it carries into your running balance and adds to your year-end net.`
                     : `${fmt(Math.abs(moSurplus))} over budget this month — this draws down your running balance and lowers your year-end net.`}
@@ -2223,17 +2278,17 @@ function App() {
               ))}
             </Card>
 
-            <Card accent={totalAccumulatedBalance>=0?C.teal:C.red}>
+            <Card accent={totalAccumulatedBalance>=0?C.teal:C.neg}>
               <SectionTitle>Running balance</SectionTitle>
-              <div style={{fontSize:26,fontWeight:700,color:totalAccumulatedBalance>=0?C.teal:C.red,margin:"6px 0"}}>{fmtS(totalAccumulatedBalance)}</div>
+              <div style={{fontSize:26,fontWeight:700,color:totalAccumulatedBalance>=0?C.teal:C.neg,margin:"6px 0"}}>{fmtS(totalAccumulatedBalance)}</div>
               <div style={{fontSize:11,color:C.gray,lineHeight:1.6}}>
                 {priorYearsCarryover!==0
-                  ? <>Prior years: <strong style={{color:priorYearsCarryover>=0?C.teal:C.red}}>{fmtS(priorYearsCarryover)}</strong> · This year so far: <strong style={{color:runningBalance>=0?C.teal:C.red}}>{fmtS(runningBalance)}</strong></>
+                  ? <>Prior years: <strong style={{color:priorYearsCarryover>=0?C.teal:C.neg}}>{fmtS(priorYearsCarryover)}</strong> · This year so far: <strong style={{color:runningBalance>=0?C.teal:C.neg}}>{fmtS(runningBalance)}</strong></>
                   : <>Cumulative surplus/deficit from {MONTH_FULL[0]} through {MONTH_FULL[selMonth]}.</>
                 }
               </div>
-              {totalAccumulatedBalance>moSpendable*2 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:6,fontSize:11,color:C.green}}>You're building a healthy cushion. Consider moving some into a high-yield savings account.</div>}
-              {totalAccumulatedBalance<0 && <div style={{marginTop:8,padding:"6px 10px",background:C.redLight,borderRadius:6,fontSize:11,color:C.red}}>You're running a cumulative deficit. Review spending or adjust your budget.</div>}
+              {totalAccumulatedBalance>moSpendable*2 && <div style={{marginTop:8,padding:"6px 10px",background:C.greenLight,borderRadius:8,fontSize:11,color:C.green}}>You're building a healthy cushion. Consider moving some into a high-yield savings account.</div>}
+              {totalAccumulatedBalance<0 && <div style={{marginTop:8,padding:"6px 10px",background:C.negLight,borderRadius:8,fontSize:11,color:C.neg}}>You're running a cumulative deficit. Review spending or adjust your budget.</div>}
             </Card>
 
             <Card>
@@ -2276,8 +2331,8 @@ function App() {
           <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
             {[
               {label:"Weekly plan",      val:fmt(viewBudget),             sub:lastWeekSurplus>0&&!viewWeek?`base ${fmt(weeklyBudget)} + ${fmt(lastWeekSurplus)} rollover`:"spendable ÷ 4.33", color:C.teal},
-              {label:"Actually spent",  val:fmtA(viewTotal),             sub:viewWeek?"archived":"this week",      color:viewTotal>viewBudget?C.red:C.text},
-              {label:"Remaining",        val:fmtSA(viewBudget-viewTotal), sub:"this week",                          color:viewBudget-viewTotal>=0?C.green:C.red},
+              {label:"Actually spent",  val:fmtA(viewTotal),             sub:viewWeek?"archived":"this week",      color:viewTotal>viewBudget?C.neg:C.text},
+              {label:"Remaining",        val:fmtSA(viewBudget-viewTotal), sub:"this week",                          color:viewBudget-viewTotal>=0?C.green:C.neg},
               {label:"Entries",          val:String(viewEntries.length),  sub:"logged",                             color:C.gray},
             ].map(m=><MetricTile key={m.label} label={m.label} value={m.val} sub={m.sub} color={m.color}/>)}
           </div>
@@ -2344,12 +2399,12 @@ function App() {
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
                       <span style={{fontSize:12,color:C.text,fontWeight:500}}>{cat.label}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:12,fontWeight:600,color:over?C.red:C.text}}>{fmtD(spent)}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:over?C.neg:C.text}}>{fmtD(spent)}</span>
                         <span style={{fontSize:11,color:C.gray}}>/ {fmtD(wkB)}</span>
                         {spent>0 && <Pill ok={!over} warn={over} sm>{over?`+${fmtD(spent-wkB)} over`:`${fmtD(wkB-spent)} left`}</Pill>}
                       </div>
                     </div>
-                    <ProgressBar value={spent} max={wkB} color={over?C.red:CHART_COLORS[i%CHART_COLORS.length]}/>
+                    <ProgressBar value={spent} max={wkB} color={over?C.neg:CHART_COLORS[i%CHART_COLORS.length]}/>
                   </div>
                 );
               })}
@@ -2371,7 +2426,7 @@ function App() {
                         <div style={{fontSize:11,color:C.gray,marginTop:1}}>{e.date}{e.note?" · "+e.note:""}</div>
                       </div>
                       <span style={{fontWeight:700,fontSize:13,color:C.text}}>{fmtA(e.amount)}</span>
-                      <button aria-label="Delete entry" onClick={()=>delEntry(e.id,!!viewWeek)} style={{width:26,height:26,borderRadius:6,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
+                      <button aria-label="Delete entry" onClick={()=>delEntry(e.id,!!viewWeek)} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
                     </div>
                   );
                 })
@@ -2379,7 +2434,7 @@ function App() {
             {viewEntries.length>0 && (
               <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontSize:14,fontWeight:700}}>
                 <span>Week total</span>
-                <span style={{color:viewTotal>viewBudget?C.red:C.teal}}>{fmtA(viewTotal)}</span>
+                <span style={{color:viewTotal>viewBudget?C.neg:C.teal}}>{fmtA(viewTotal)}</span>
               </div>
             )}
             {viewWeek && <div style={{fontSize:11,color:C.gray,marginTop:8,fontStyle:"italic"}}>Archived week — entries can still be added or deleted.</div>}
@@ -2435,13 +2490,13 @@ function App() {
               const zeroFrac = crossesZero
                 ? Math.max(0.02, Math.min(0.98, yDomMax / yRange))
                 : (allNeg ? 0.01 : 0.99);
-              const strokeColor = crossesZero ? "url(#balStrokeGrad)" : (allNeg ? C.red : C.teal);
+              const strokeColor = crossesZero ? "url(#balStrokeGrad)" : (allNeg ? C.neg : C.teal);
               const fillColor   = crossesZero ? "url(#balFillGrad)"   : (allNeg ? "url(#balGradNeg)" : "url(#balGrad)");
               const monthLabel  = MONTH_NAMES[selMonth];
               const totalLabel  = totalAccumulatedBalance >= 0
                 ? `Total gain in ${monthLabel}`
                 : `Debt in ${monthLabel}`;
-              const priorColor  = priorYearsCarryover >= 0 ? C.teal : C.red;
+              const priorColor  = priorYearsCarryover >= 0 ? C.teal : C.neg;
               return (
                 <Card>
                   <SectionTitle>Running balance — {yr.label.split("—")[0].trim()}</SectionTitle>
@@ -2459,7 +2514,7 @@ function App() {
                       </div>
                     )}
                     <div style={{fontSize:11,marginLeft:"auto"}}>
-                      <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.red}}>{totalLabel}: {fmtS(totalAccumulatedBalance)}</strong>
+                      <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.neg}}>{totalLabel}: {fmtS(totalAccumulatedBalance)}</strong>
                     </div>
                   </div>
                   <ResponsiveContainer width="100%" height={200}>
@@ -2470,29 +2525,29 @@ function App() {
                           <stop offset="95%" stopColor={C.teal} stopOpacity={0.02}/>
                         </linearGradient>
                         <linearGradient id="balGradNeg" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={C.red} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={C.red} stopOpacity={0.02}/>
+                          <stop offset="5%" stopColor={C.neg} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={C.neg} stopOpacity={0.02}/>
                         </linearGradient>
                         {crossesZero && <>
                           <linearGradient id="balStrokeGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset={`${Math.max(0,zeroFrac*100-4)}%`} stopColor={C.teal} stopOpacity={1}/>
-                            <stop offset={`${Math.min(100,zeroFrac*100+4)}%`} stopColor={C.red} stopOpacity={1}/>
+                            <stop offset={`${Math.min(100,zeroFrac*100+4)}%`} stopColor={C.neg} stopOpacity={1}/>
                           </linearGradient>
                           <linearGradient id="balFillGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%"                        stopColor={C.teal} stopOpacity={0.28}/>
                             <stop offset={`${zeroFrac*100*0.88}%`}   stopColor={C.teal} stopOpacity={0.04}/>
-                            <stop offset={`${zeroFrac*100}%`}        stopColor={C.red}  stopOpacity={0.04}/>
-                            <stop offset="100%"                      stopColor={C.red}  stopOpacity={0.28}/>
+                            <stop offset={`${zeroFrac*100}%`}        stopColor={C.neg}  stopOpacity={0.04}/>
+                            <stop offset="100%"                      stopColor={C.neg}  stopOpacity={0.28}/>
                           </linearGradient>
                         </>}
                       </defs>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
                       <YAxis domain={[yDomMin, yDomMax]} tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v===0?"$0":v>0?"+"+fmt(v):fmtS(v)} axisLine={false} tickLine={false} width={60}/>
-                      <Tooltip separator=": " formatter={v=>[fmtS(v),"Total position"]} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                      <Tooltip separator=": " formatter={v=>[fmtS(v),"Total position"]} {...tipProps()}/>
                       {crossesZero && <ReferenceLine y={0} stroke={C.gray} strokeOpacity={0.45} strokeDasharray="4 3"/>}
                       {priorYearsCarryover!==0 && <ReferenceLine y={priorYearsCarryover} stroke={priorColor} strokeWidth={2} strokeOpacity={0.8} strokeDasharray="8 3"/>}
                       <Area type="monotone" dataKey="balance" stroke={strokeColor} fill={fillColor} strokeWidth={2}
-                        dot={(p)=>p.index===selMonth?<circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={(p.payload?.balance??0)>=0?C.teal:C.red}/>:<circle key={p.index} r={0}/>}/>
+                        dot={(p)=>p.index===selMonth?<circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={(p.payload?.balance??0)>=0?C.teal:C.neg}/>:<circle key={p.index} r={0}/>}/>
                     </AreaChart>
                   </ResponsiveContainer>
                 </Card>
@@ -2503,7 +2558,7 @@ function App() {
             <Card>
               <SectionTitle>Budget vs actual</SectionTitle>
               <div style={{display:"flex",gap:20,marginBottom:10}}>
-                {[["Budgeted",C.teal],["Actual",C.red]].map(([l,c])=>(
+                {[["Budgeted",C.teal],["Actual",C.neg]].map(([l,c])=>(
                   <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.gray}}>
                     <div style={{width:10,height:10,borderRadius:3,background:c}}/>{l}
                   </div>
@@ -2516,9 +2571,9 @@ function App() {
                 <BarChart data={budgetVsActual.filter(d=>d.Actual>0)} barGap={2} barCategoryGap="28%">
                   <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                  <Tooltip separator=": " formatter={v=>fmt(v)} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                  <Tooltip separator=": " formatter={v=>fmt(v)} {...tipProps()}/>
                   <Bar dataKey="Budgeted" fill={C.teal} radius={[3,3,0,0]} opacity={0.85}/>
-                  <Bar dataKey="Actual" fill={C.red} radius={[3,3,0,0]}/>
+                  <Bar dataKey="Actual" fill={C.neg} radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>}
             </Card>
@@ -2550,12 +2605,12 @@ function App() {
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <SectionTitle style={{margin:0}}>Spending distribution</SectionTitle>
                     <div style={{position:"relative"}}>
-                      <button onClick={()=>setPiePickerOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:isRange?C.teal+"22":"transparent",color:isRange?C.teal:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      <button onClick={()=>setPiePickerOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:isRange?C.teal+"22":"transparent",color:isRange?C.teal:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                         {pieLabel} <span style={{fontSize:10,opacity:0.6}}>▾</span>
                       </button>
                       {piePickerOpen && <>
                         <div onClick={()=>setPiePickerOpen(false)} style={{position:"fixed",inset:0,zIndex:99}}/>
-                        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.glassTooltip,backdropFilter:"blur(28px)",WebkitBackdropFilter:"blur(28px)",border:"1px solid rgba(255,255,255,0.16)",borderRadius:12,padding:12,zIndex:100,width:220,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"}}>
+                        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.glassTooltip,backdropFilter:"blur(50px) saturate(200%)",WebkitBackdropFilter:"blur(50px) saturate(200%)",border:`1px solid ${C.borderDark}`,borderRadius:12,padding:12,zIndex:100,width:220,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"}}>
                           <div style={{fontSize:10,color:C.gray,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>
                             {pieMonthEnd===null ? "Select month or drag a range" : "Range selected — click to start over"}
                           </div>
@@ -2573,7 +2628,7 @@ function App() {
                                   } else {
                                     setPieMonthEnd(mi); setPiePickerOpen(false);
                                   }
-                                }} style={{padding:"5px 2px",borderRadius:5,border:"none",fontSize:11,fontWeight:isEdge?700:400,background:inRange?C.teal+"44":"transparent",color:inRange?C.teal:C.text,cursor:"pointer",transition:"background 0.1s"}}>
+                                }} style={{padding:"5px 2px",borderRadius:8,border:"none",fontSize:11,fontWeight:isEdge?700:400,background:inRange?C.teal+"44":"transparent",color:inRange?C.teal:C.text,cursor:"pointer",transition:"background 0.1s"}}>
                                   {m}
                                 </button>
                               );
@@ -2593,7 +2648,7 @@ function App() {
                         <ResponsiveContainer width="100%" height={210}>
                           <PieChart><Pie data={pieSeries} dataKey="value" cx="50%" cy="50%" innerRadius={54} outerRadius={88} paddingAngle={2}>
                             {pieSeries.map((e,i)=><Cell key={i} fill={e.color}/>)}
-                          </Pie><Tooltip separator=": " formatter={v=>fmt(v)} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/></PieChart>
+                          </Pie><Tooltip separator=": " formatter={v=>fmt(v)} {...tipProps()}/></PieChart>
                         </ResponsiveContainer>
                         <div style={{paddingTop:8}}>
                           {cats.map((cat,i)=>{
@@ -2680,7 +2735,7 @@ function App() {
                     })()} margin={{top:4,right:4,bottom:0,left:0}}>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
                       <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                      <Tooltip separator=": " formatter={v=>fmt(v)} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                      <Tooltip separator=": " formatter={v=>fmt(v)} {...tipProps()}/>
                       <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
                       {activeCats.map((c,i)=>(
                         <Line key={c.id} type="monotone" dataKey={c.label} stroke={CHART_COLORS[cats.findIndex(x=>x.id===c.id)%CHART_COLORS.length]} strokeWidth={2} dot={false} activeDot={{r:4}}/>
@@ -2724,7 +2779,7 @@ function App() {
                 return {name:c.label,A:a,B:b,delta:b-a,color:CHART_COLORS[i%CHART_COLORS.length]};
               }).filter(r=>r.A>0||r.B>0);
 
-              const selStyle={fontSize:12,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",background:"rgba(255,255,255,0.07)",color:C.text,cursor:"pointer"};
+              const selStyle={fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:"rgba(255,255,255,0.07)",color:C.text,cursor:"pointer"};
               return (
                 <Card>
                   <SectionTitle>Comparison</SectionTitle>
@@ -2743,7 +2798,7 @@ function App() {
                     <BarChart data={cmpData} barGap={2} barCategoryGap="28%">
                       <XAxis dataKey="name" tick={{fontSize:10,fill:C.gray}} axisLine={false} tickLine={false}/>
                       <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                      <Tooltip separator=": " cursor={false} formatter={(v,name)=>[fmt(v), name==="A"?defaultA.label:defaultB.label]} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                      <Tooltip separator=": " cursor={false} formatter={(v,name)=>[fmt(v), name==="A"?defaultA.label:defaultB.label]} {...tipProps()}/>
                       <Legend formatter={(v)=>v==="A"?defaultA.label:defaultB.label} wrapperStyle={{fontSize:11,paddingTop:8}}/>
                       <Bar dataKey="A" fill={C.teal} radius={[3,3,0,0]} opacity={0.85}/>
                       <Bar dataKey="B" fill={C.amber} radius={[3,3,0,0]}/>
@@ -2769,7 +2824,7 @@ function App() {
                             <div style={{display:"flex",justifyContent:"flex-end"}}>
                               {r.delta===0
                                 ? <span style={{fontSize:11,color:C.gray}}>—</span>
-                                : <span style={{fontSize:11,fontWeight:600,color:up?C.red:C.green,display:"flex",alignItems:"center",gap:3}}>
+                                : <span style={{fontSize:11,fontWeight:600,color:up?C.neg:C.green,display:"flex",alignItems:"center",gap:3}}>
                                     <span style={{fontSize:13}}>{up?"↑":"↓"}</span>
                                     {fmt(Math.abs(r.delta))}{pct!==null?` (${pct}%)`:""}
                                   </span>
@@ -2788,7 +2843,7 @@ function App() {
             <Card>
               <SectionTitle>Monthly spendable vs budget — all years</SectionTitle>
               <div style={{display:"flex",gap:20,marginBottom:12}}>
-                {[["Spendable",C.teal],["Budget",C.red]].map(([l,c])=>(
+                {[["Spendable",C.teal],["Budget",C.neg]].map(([l,c])=>(
                   <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.gray}}>
                     <div style={{width:10,height:10,borderRadius:3,background:c}}/>{l}
                   </div>
@@ -2798,9 +2853,9 @@ function App() {
                 <BarChart data={barData} barGap={4}>
                   <XAxis dataKey="name" tick={{fontSize:12,fill:C.gray}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>"$"+v} axisLine={false} tickLine={false} width={44}/>
-                  <Tooltip separator=": " formatter={v=>fmt(v)+"/mo"} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                  <Tooltip separator=": " formatter={v=>fmt(v)+"/mo"} {...tipProps()}/>
                   <Bar dataKey="Spendable" name="Spendable" fill={C.teal} radius={[4,4,0,0]}/>
-                  <Bar dataKey="Spend" name="Budget" fill={C.red} radius={[4,4,0,0]}/>
+                  <Bar dataKey="Spend" name="Budget" fill={C.neg} radius={[4,4,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -2823,7 +2878,7 @@ function App() {
               if(unfunded.length===0) return null;
               const suggested=Math.round(examBudget/unfunded.length);
               return (
-                <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",background:C.tealLight,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:`1px solid rgba(90,154,114,0.28)`,borderRadius:8,marginBottom:14,fontSize:12}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",background:C.tealLight,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${C.tealMid}`,borderRadius:8,marginBottom:14,fontSize:12}}>
                   <span style={{color:C.teal,fontSize:15,flexShrink:0}}>◎</span>
                   <div style={{flex:1,color:C.teal,lineHeight:1.6}}>
                     Your USMLE/Exams budget has <strong>{fmt(examBudget)}/mo</strong> allocated.
@@ -2835,7 +2890,7 @@ function App() {
                         if(i>=0) d.stepGoals[i].monthlyContribution=suggested;
                       });
                       upd(d);
-                    }} style={{marginLeft:10,fontSize:11,padding:"3px 10px",borderRadius:6,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Apply</button>
+                    }} style={{marginLeft:10,fontSize:11,padding:"3px 10px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Apply</button>
                   </div>
                 </div>
               );
@@ -2853,7 +2908,7 @@ function App() {
                 const monthsUntilExam=examDateObj?Math.max(1,Math.ceil((examDateObj-new Date())/2628000000)):null;
                 const neededMonthly=(!funded&&monthsUntilExam)?Math.ceil(remaining/monthsUntilExam):null;
                 return (
-                  <div key={g.id} style={{padding:"14px",border:`1px solid ${funded?C.green:C.border}`,borderRadius:10,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+                  <div key={g.id} style={{padding:"14px",border:`1px solid ${funded?C.green:C.border}`,borderRadius:8,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                       <div>
                         <div style={{fontWeight:700,fontSize:14,color:C.text}}>{g.label}</div>
@@ -2874,11 +2929,11 @@ function App() {
                       <div style={{display:"flex",gap:16,marginTop:10,flexWrap:"wrap"}}>
                         <div>
                           <div style={{fontSize:10,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Exam date</div>
-                          <input type="date" value={g.targetDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetDate=e.target.value;upd(d);}} style={{fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",background:C.bg,color:C.text}}/>
+                          <input type="date" value={g.targetDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetDate=e.target.value;upd(d);}} style={{fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",background:C.bg,color:C.text}}/>
                         </div>
                         <div>
                           <div style={{fontSize:10,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Funded by (projected)</div>
-                          <div style={{fontSize:13,fontWeight:600,color:onTrack===false?C.red:onTrack===true?C.green:C.text,padding:"4px 0"}}>
+                          <div style={{fontSize:13,fontWeight:600,color:onTrack===false?C.neg:onTrack===true?C.green:C.text,padding:"4px 0"}}>
                             {projDateStr||"—"}
                             {onTrack===false&&neededMonthly&&<span style={{fontSize:11,color:C.amber,marginLeft:8}}>needs {fmt(neededMonthly)}/mo to hit deadline</span>}
                           </div>
@@ -2890,12 +2945,12 @@ function App() {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,flexWrap:"wrap",gap:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
                         <span style={{color:C.gray}}>Monthly:</span>
-                        <input type="number" value={g.monthlyContribution||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].monthlyContribution=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <input type="number" value={g.monthlyContribution||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].monthlyContribution=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
                         <span style={{color:C.gray}}>/mo</span>
                         <span style={{color:C.gray,marginLeft:8}}>Target:</span>
-                        <input type="number" value={g.targetAmount} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <input type="number" value={g.targetAmount} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
                       </div>
-                      {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:7,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
+                      {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
                     </div>
                   </div>
                 );
@@ -2928,7 +2983,7 @@ function App() {
                         const slEntry=(d.savingsLog||[]).find(s=>s.id===entry.id);
                         reverseDepositGroup(d, slEntry);
                         upd(d);
-                      }} style={{width:26,height:26,borderRadius:6,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
+                      }} style={{width:26,height:26,borderRadius:8,background:C.surface,border:`1px solid ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.gray,fontSize:14,fontWeight:700}}>×</button>
                     </div>
                   );
                 })
@@ -2939,7 +2994,7 @@ function App() {
           <Card>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <SectionTitle>Custom Goals</SectionTitle>
-              <button onClick={()=>setShowAddSavingsGoal(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>+ Add goal</button>
+              <button onClick={()=>setShowAddSavingsGoal(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>+ Add goal</button>
             </div>
             {(data.savingsGoals||[]).length===0
               ?<div style={{textAlign:"center",padding:"20px 0",color:C.gray,fontSize:13}}>No custom goals yet — add one above.</div>
@@ -2955,8 +3010,8 @@ function App() {
                       <span style={{fontWeight:600,fontSize:13,color:C.text}}>{g.label}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <Pill ok={funded} warn={!funded&&pct<50}>{pct}%</Pill>
-                        {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
-                        <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${C.redMid}`,background:C.redLight,color:C.red,cursor:"pointer"}}>×</button>
+                        {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
+                        <button onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>×</button>
                       </div>
                     </div>
                     <ProgressBar value={g.saved||0} max={g.targetAmount} color={funded?C.green:CHART_COLORS[(gi+2)%CHART_COLORS.length]}/>
@@ -2973,9 +3028,9 @@ function App() {
             <div style={{fontSize:11,color:C.gray,marginBottom:12}}>How your running balance + monthly savings could grow over 60 months at a given APY (e.g. a HYSA).</div>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
               <span style={{fontSize:13,color:C.textMid,fontWeight:500}}>APY</span>
-              <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
+              <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
               <span style={{fontSize:12,color:C.gray}}>%</span>
-              <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.red}}>{fmtS(totalAccumulatedBalance)}</strong></span>
+              <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.neg}}>{fmtS(totalAccumulatedBalance)}</strong></span>
               <span style={{fontSize:12,color:C.gray}}>+ {fmt(yr.monthly.savings||0)}/mo savings</span>
             </div>
             {(()=>{
@@ -3009,19 +3064,19 @@ function App() {
                       </defs>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:C.gray}} axisLine={false} tickLine={false}/>
                       <YAxis tick={{fontSize:11,fill:C.gray}} tickFormatter={v=>v>=1000?"$"+Math.round(v/1000)+"k":("$"+v)} axisLine={false} tickLine={false} width={44}/>
-                      <Tooltip separator=": " formatter={v=>[fmt(v),"Projected balance"]} labelStyle={{color:C.text}} itemStyle={{color:C.text}} contentStyle={{background:C.glassTooltip,color:C.text,border:"1px solid rgba(255,255,255,0.16)",borderRadius:10,fontSize:12,backdropFilter:"blur(20px)"}}/>
+                      <Tooltip separator=": " formatter={v=>[fmt(v),"Projected balance"]} {...tipProps()}/>
                       <ReferenceLine y={0} stroke={C.border} strokeDasharray="4 2"/>
                       <Area type="monotone" dataKey="balance" stroke={C.teal} fill="url(#projGrad)" strokeWidth={2}/>
                     </AreaChart>
                   </ResponsiveContainer>
                   <div style={{display:"flex",gap:12,marginTop:14,flexWrap:"wrap"}}>
-                    <div style={{flex:1,minWidth:160,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                    <div style={{flex:1,minWidth:160,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:8,padding:"12px 14px",border:`1px solid ${C.border}`}}>
                       <div style={{fontSize:11,color:C.gray,marginBottom:4}}>Projected graduation balance</div>
-                      <div style={{fontSize:20,fontWeight:700,color:gradBal>=0?C.teal:C.red,fontFamily:"'Newsreader',Georgia,serif"}}>{gradBal>=0?"+":""}{fmt(gradBal)}</div>
+                      <div style={{fontSize:20,fontWeight:700,color:gradBal>=0?C.teal:C.neg,fontFamily:"'Newsreader',Georgia,serif"}}>{gradBal>=0?"+":""}{fmt(gradBal)}</div>
                       <div style={{fontSize:10,color:C.gray,marginTop:2}}>in ~{moToGrad} months at {apy||0}% APY</div>
                     </div>
                     {totalAccumulatedBalance>500 && hysaGain>0 && (
-                      <div style={{flex:1,minWidth:160,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                      <div style={{flex:1,minWidth:160,background:C.surface,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:8,padding:"12px 14px",border:`1px solid ${C.border}`}}>
                         <div style={{fontSize:11,color:C.gray,marginBottom:4}}>HYSA interest / year</div>
                         <div style={{fontSize:20,fontWeight:700,color:C.green,fontFamily:"'Newsreader',Georgia,serif"}}>+{fmt(hysaGain)}</div>
                         <div style={{fontSize:10,color:C.gray,marginTop:2}}>on your {fmt(totalAccumulatedBalance)} total balance at 4.5% APY</div>
@@ -3054,7 +3109,7 @@ function App() {
                   const fundLabel=fundDate.toLocaleString("default",{month:"short",year:"numeric"});
                   recs.push({color:C.amber,text:`STEP fund gap: ${fmt(stepGap)} remaining. At your current ${fmt(examBudget)}/mo exam budget, fully funded by ${fundLabel}.`});
                 } else {
-                  recs.push({color:C.red,text:`STEP fund gap: ${fmt(stepGap)} still needed. Add an Exams budget line — even ${fmt(Math.ceil(stepGap/24))}/mo gets you there by Year 3.`});
+                  recs.push({color:C.neg,text:`STEP fund gap: ${fmt(stepGap)} still needed. Add an Exams budget line — even ${fmt(Math.ceil(stepGap/24))}/mo gets you there by Year 3.`});
                 }
               } else if(stepGoals.length>0){
                 recs.push({color:C.green,text:"All STEP exam goals are fully funded — excellent! You're set for board exams."});
@@ -3062,7 +3117,7 @@ function App() {
 
               // Savings line
               if(!mSav){
-                recs.push({color:C.red,text:"No savings line in your budget. Even $50–100/mo builds a 3-month emergency fund before residency."});
+                recs.push({color:C.neg,text:"No savings line in your budget. Even $50–100/mo builds a 3-month emergency fund before residency."});
               } else {
                 const annualSav=mSav*12;
                 const r=apy/100/12;
@@ -3077,7 +3132,7 @@ function App() {
                 const hysaEarn=Math.round(totalAccumulatedBalance*0.045);
                 recs.push({color:C.green,text:`Your ${fmt(totalAccumulatedBalance)} total balance earns ~${fmt(hysaEarn)}/yr in a 4.5% HYSA vs ~$0 sitting in a checking account.`});
               } else if(totalAccumulatedBalance<0){
-                recs.push({color:C.red,text:`Total balance is ${fmtS(totalAccumulatedBalance)} — you're drawing down your buffer. Review your largest spending categories.`});
+                recs.push({color:C.neg,text:`Total balance is ${fmtS(totalAccumulatedBalance)} — you're drawing down your buffer. Review your largest spending categories.`});
               }
 
               // Monthly surplus routing
@@ -3126,19 +3181,19 @@ function App() {
               const disb=Math.max(g-tf-hi,0),oth=(Number(y.otherIncome)||0)*12;
               const moD=(disb+oth)/12,moSp=moTotal({...y.monthly,subs:subsMo}),moS=moD-moSp;
               return (
-                <Card key={y.id} accent={moS>=0?C.teal:C.red}>
+                <Card key={y.id} accent={moS>=0?C.teal:C.neg}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8,rowGap:10}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:14,color:C.text}}>{y.label}</div>
                       <div style={{display:"flex",gap:4,marginTop:6,alignItems:"center"}}>
-                        <input type="date" value={y.startDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].startDate=e.target.value;upd(d);}} style={{fontSize:10,border:`1px solid ${C.border}`,borderRadius:5,padding:"2px 5px",background:C.bg,color:C.text}}/>
+                        <input type="date" value={y.startDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].startDate=e.target.value;upd(d);}} style={{fontSize:10,border:`1px solid ${C.border}`,borderRadius:8,padding:"2px 5px",background:C.bg,color:C.text}}/>
                         <span style={{fontSize:10,color:C.gray}}>→</span>
-                        <input type="date" value={y.endDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].endDate=e.target.value;upd(d);}} style={{fontSize:10,border:`1px solid ${C.border}`,borderRadius:5,padding:"2px 5px",background:C.bg,color:C.text}}/>
+                        <input type="date" value={y.endDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].endDate=e.target.value;upd(d);}} style={{fontSize:10,border:`1px solid ${C.border}`,borderRadius:8,padding:"2px 5px",background:C.bg,color:C.text}}/>
                       </div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <Pill ok={moS>=0} warn={moS<0}>{fmtS(moS)}/mo</Pill>
-                      {data.years.length>1 && <button onClick={()=>setConfirmYearRemove(y.id)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.textMid,cursor:"pointer",fontSize:12,flexShrink:0,opacity:0.85}} title="Remove year">✕</button>}
+                      {data.years.length>1 && <button onClick={()=>setConfirmYearRemove(y.id)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMid,cursor:"pointer",fontSize:12,flexShrink:0,opacity:0.85}} title="Remove year">✕</button>}
                     </div>
                   </div>
                   {y.type==="extended" && <Banner type="warn">Extended year: tuition waived, fees only</Banner>}
@@ -3154,15 +3209,15 @@ function App() {
                         <span style={{fontSize:12,color:C.textMid}}>{label}</span>
                         {isHousing
                           ? <input type="number" value={y.monthly.housing||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].monthly.housing=Number(e.target.value)||0;upd(d);}}
-                              style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 7px",background:C.bg,color:C.text}}/>
+                              style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 7px",background:C.bg,color:C.text}}/>
                           : <input type="number" value={y[field]} onChange={e=>setYrF(i,field,e.target.value)}
-                              style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 7px",background:C.bg,color:C.text}}/>
+                              style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 7px",background:C.bg,color:C.text}}/>
                         }
                       </div>
                       <div style={{fontSize:10,color:C.gray,marginTop:1}}>{note}</div>
                     </div>
                   ))}
-                  <div style={{marginTop:12,padding:"10px 12px",background:C.tealLight,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:`1px solid rgba(90,154,114,0.22)`,borderRadius:8,fontSize:12}}>
+                  <div style={{marginTop:12,padding:"10px 12px",background:C.tealLight,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${C.tealMid}`,borderRadius:8,fontSize:12}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{color:C.textMid}}>Disbursed/yr</span><strong style={{color:C.teal}}>{fmt(disb)}</strong></div>
                     <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:C.textMid}}>Monthly spendable</span><strong style={{color:C.teal}}>{fmt(moD)}/mo</strong></div>
                   </div>
@@ -3197,20 +3252,20 @@ function App() {
                       cum+=moS*12;
                       return <tr key={y.id}>
                         <td style={{padding:"8px",fontWeight:600,whiteSpace:"nowrap",fontSize:11,color:C.text}}>{y.label}</td>
-                        <td style={{padding:"8px",color:C.red,fontWeight:600}}>{g>0?fmt(g):"TBD"}</td>
+                        <td style={{padding:"8px",color:C.neg,fontWeight:600}}>{g>0?fmt(g):"TBD"}</td>
                         <td style={{padding:"8px",color:C.gray}}>{fmt(tf+hi)}</td>
                         <td style={{padding:"8px",color:C.teal,fontWeight:600}}>{fmt(disb)}</td>
                         <td style={{padding:"8px",fontWeight:600,color:C.text}}>{fmt(moD)}</td>
                         <td style={{padding:"8px",color:C.text}}>{fmt(moSp)}</td>
-                        <td style={{padding:"8px",fontWeight:600,color:moS>=0?C.teal:C.red}}>{fmtS(moS)}</td>
-                        <td style={{padding:"8px",fontWeight:700,color:cum>=0?C.teal:C.red}}>{fmtS(cum)}</td>
+                        <td style={{padding:"8px",fontWeight:600,color:moS>=0?C.teal:C.neg}}>{fmtS(moS)}</td>
+                        <td style={{padding:"8px",fontWeight:700,color:cum>=0?C.teal:C.neg}}>{fmtS(cum)}</td>
                       </tr>;
                     });
                   })()}
                 </tbody>
               </table>
             </div>
-            <div style={{marginTop:10,padding:"8px 12px",background:totDisburse-totSpend>=0?C.tealLight:C.redLight,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:`1px solid ${totDisburse-totSpend>=0?"rgba(90,154,114,0.28)":"rgba(180,80,80,0.25)"}`,borderRadius:8,fontSize:12,color:totDisburse-totSpend>=0?C.teal:C.red,fontWeight:600}}>
+            <div style={{marginTop:10,padding:"8px 12px",background:totDisburse-totSpend>=0?C.tealLight:C.negLight,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${totDisburse-totSpend>=0?C.tealMid:C.negMid}`,borderRadius:8,fontSize:12,color:totDisburse-totSpend>=0?C.teal:C.neg,fontWeight:600}}>
               {data.years.length}-year net: {fmtS(totDisburse-totSpend)}
             </div>
           </Card>
@@ -3234,7 +3289,7 @@ function App() {
                   ].map(([l,...vals],i)=>(
                     <tr key={l} style={{background:i===5?C.surface:"transparent"}}>
                       <td style={{padding:"7px 8px",fontWeight:i===5?700:400,color:i===5?C.text:C.textMid}}>{l}</td>
-                      {vals.map((v,j)=><td key={j} style={{padding:"7px 8px",fontWeight:i===5?700:400,color:i===5?C.red:C.text}}>{v}</td>)}
+                      {vals.map((v,j)=><td key={j} style={{padding:"7px 8px",fontWeight:i===5?700:400,color:i===5?C.neg:C.text}}>{v}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -3308,7 +3363,7 @@ function App() {
                         {[{l:"Monthly",v:fmtD(mo)},{l:"Annual",v:fmt(mo*12)},{l:"Active",v:String(subs.filter(s=>s.active!==false).length)}].map(m=>(
                           <div key={m.l} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",flex:1}}>
                             <div style={{fontSize:10,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{m.l}</div>
-                            <div style={{fontSize:18,fontWeight:700,color:C.red,fontFamily:"'Newsreader',Georgia,serif"}}>{m.v}</div>
+                            <div style={{fontSize:18,fontWeight:700,color:C.neg,fontFamily:"'Newsreader',Georgia,serif"}}>{m.v}</div>
                           </div>
                         ))}
                       </div>
@@ -3352,9 +3407,9 @@ function App() {
                       </div>
                       {due && <Pill warn sm>Overdue</Pill>}
                       {soon && <Pill warn sm>{d}d</Pill>}
-                      {due && <button onClick={()=>setRenewDlg(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:"none",background:C.amber,color:"#fff",cursor:"pointer",fontWeight:600}}>Handle</button>}
-                      <button onClick={()=>editSub(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",color:C.gray}}>Edit</button>
-                      <button onClick={()=>delSub(s.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${C.redMid}`,background:C.redLight,cursor:"pointer",color:C.red,fontWeight:600}}>Delete</button>
+                      {due && <button onClick={()=>setRenewDlg(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.amber,color:"#fff",cursor:"pointer",fontWeight:600}}>Handle</button>}
+                      <button onClick={()=>editSub(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",color:C.gray}}>Edit</button>
+                      <button onClick={()=>delSub(s.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,cursor:"pointer",color:C.danger,fontWeight:600}}>Delete</button>
                     </div>
                   );
                 })
@@ -3372,9 +3427,9 @@ function App() {
               <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
                 <div style={{width:8,height:8,borderRadius:99,background:CHART_COLORS[cats.findIndex(c=>c.id===cat.id)%CHART_COLORS.length],flexShrink:0,boxShadow:"0 0 0 1px rgba(255,255,255,0.28)"}}/>
                 <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
-                {cat.locked && <span style={{fontSize:11,color:C.gray,background:C.surface,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:5}}>Fixed</span>}
-                {cat.autoCalc && <span style={{fontSize:11,color:C.blue,background:C.blueLight,padding:"2px 8px",borderRadius:5}}>Auto</span>}
-                {!cat.locked && !cat.autoCalc && <button onClick={()=>delCat(cat.id)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid ${C.redMid}`,background:C.redLight,color:C.red,cursor:"pointer",fontWeight:500}}>Remove</button>}
+                {cat.locked && <span style={{fontSize:11,color:C.gray,background:C.surface,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:8}}>Fixed</span>}
+                {cat.autoCalc && <span style={{fontSize:11,color:C.blue,background:C.blueLight,padding:"2px 8px",borderRadius:8}}>Auto</span>}
+                {!cat.locked && !cat.autoCalc && <button onClick={()=>delCat(cat.id)} style={{fontSize:11,padding:"3px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer",fontWeight:500}}>Remove</button>}
               </div>
             ))}
             <div style={{marginTop:14,display:"flex",gap:8,alignItems:"center"}}>
