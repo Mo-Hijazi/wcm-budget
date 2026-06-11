@@ -9,17 +9,17 @@ Phase order and rationale. Backlog items live in `FUTURE_WORK.md`. Mark items �
 ## Phase 2 ✓ — Savings & Charts (June 2026)
 Projected graduation balance, recommendations, comparison mode, Step 3 goal + migration, pie chart month/range picker, CSV import (auto-detect columns, keyword categorization, review + bulk import).
 
-## Phase 2.5 — Marro UI overhaul — IN PROGRESS
-- ✓ Step 1 — Foundation: palette, Inter+Newsreader, dark base, rename to Marro
-- ✓ Step 2 — Logo + header: growth rings SVG, ping-pong animation
-- ✓ Step 3 (+3b/3c/3d) — Glass cards site-wide, semantic color fix, legacy controls removed
-- ✓ Full UI/UX audit (June 11 2026 — see `UI_AUDIT_LOG.md`)
-- **→ Step 4 — Typography pass**: Newsreader on all numbers, Inter weights on labels, number roll animation
-- Step 5 — Tab bar: floating glass pill, active cream pill, cross-fade transitions
-- Step 6 — Charts overhaul: Marro palette, glass tooltips, gradient fills, draw-on animation
-- Step 7 — Lava lamp background: 4 animated blobs, calm state
-- Step 8 — Budget health wiring: blob states tied to real data (calm/low-tide/milestone)
-- Step 9 — Animation pass + polish: remove dark-mode toggle, micro-interactions, timing
+## Phase 2.5 — Marro UI overhaul ✓ COMPLETE (June 11, 2026)
+- ✓ Steps 1–3: palette/fonts/rename, growth-rings logo, glass cards site-wide + full UI audit
+- ✓ Step 4 — Theme-ready tokens, neg/danger split, 3-tier glass, radius scale
+- ✓ Step 5 — Neutral near-black dark theme; colorblind-safe blue/amber data pair
+- ✓ Step 6 — Light theme + working toggle (prefers-color-scheme default, FOUC guard, sync-aware)
+- ✓ Step 7 — Ring-derived custom icon system (categories + UI chrome)
+- ✓ Step 8 — Identity embedding: rings app icon/favicon/manifest, ring loading screen, ring sync states, RingProgress goals, ring EmptyState
+- ✓ Step 9 — De-Cornell visible copy + manifest (YEAR_CONFIGS data kept)
+- ✓ Step 10 — Modal a11y (focus trap/Esc/aria), self-hosted fonts (offline-safe), mobile table edge fade, Step-fund chip states
+- ✓ Step 11 — Blob health states (calm/low-tide/marigold bloom), docs rewritten
+- Deferred from this phase → FUTURE_WORK: tab-pill redesign + cross-fades, chart gradient/draw-on animations, number-roll, apple-touch-icon PNG
 
 ## Phase 2.5b — Auth + Supabase (NEXT after 2.5)
 Google login via Supabase Auth; Supabase DB replaces localStorage + Gist sync; per-user isolated data; school as required signup field (feeds Phase 3); clean migration of existing WCM data on first login. Required before onboarding any non-WCM testers.

@@ -1,64 +1,71 @@
 # Marro Design System
 
-Single source of truth for visual decisions. Code lives in `index.html` (C token object ~line 400, CSS ~17–185).
+Single source of truth for visual decisions. Code lives in `index.html`: `const THEMES = ` (JS tokens, both themes), the `:root` / `[data-theme="light"]` CSS variable blocks, and `const ICONS` (icon paths).
 
 ## Concept
-Warm financial almanac under iOS-26-style liquid glass. "Frosted glass over candlelight." Hero detail: **serif numerals (Newsreader) for all money**; Inter for UI chrome.
+Neutral warm canvas under liquid glass — near-black dark theme, warm off-white light theme — with the growth-rings motif, marigold, and serif numerals carrying the brand. The green "candlelight" identity was retired June 2026 (colorblind-safety + scaling). Hero details: **serif numerals (Newsreader) for display money** and **ring-derived iconography**.
 
-## Brand
-- **Name "Marro"**: from "marrow" — vital core. Medical-adjacent without clinical feel; frames budgeting as protecting what's essential. Replaced "Ration"/"WCM Budget Planner" June 2026 (repo/URL rename deferred, no functional impact).
-- **Logo — growth rings**: concentric circles (r 11/7.5/4, stroke 1.3, innermost at 0.7 opacity), marigold `#DDA528` dot at center (r 1.4), in a 26×26 viewBox. Metaphor: tree cross-section + histology slide. Header 28×28 in `currentColor`; app icon 56×56 rounded square, `#1E3A2F` bg, `#F6EFDD` strokes.
-- **Wordmark**: "Marro" in Newsreader 500, 22px, letter-spacing 0.01em, cream on dark, right of the mark.
-- **Red does not exist in this UI** as alarm: over-budget is signalled by warmth draining (low-tide `#7C8471`), never red. (Warm clay `#E08A6B` is reserved for destructive/danger affordances — see tokens.)
+## Theme mechanism (hybrid — keep both halves in sync)
+- `const C = {...THEMES.dark}` feeds ~400 inline style refs. `applyTheme(dark)` does `Object.assign(C, THEMES[t])`, swaps `CHART_COLORS` in place, sets `<html data-theme>`, updates the `theme-color` meta. A `themeTick` state forces the post-swap render.
+- The `<style>` block consumes ~30 CSS custom properties (`--bg`, blobs, glass, inputs, focus). `[data-theme="light"]` overrides them. **Any token used in both worlds must be edited in both places.**
+- Persisted in `data.darkMode` (synced). A pre-paint script in `<head>` prevents theme flash. Legacy states were migrated to dark once (`wcm_theme_v2` localStorage marker); fresh users follow `prefers-color-scheme`.
 
 ## Color tokens (C object)
-| Token | Value | Use |
-|---|---|---|
-| `bg` | `#0b1611` | App background, dark text on filled teal/red buttons |
-| `text` | `#F6EFDD` cream | Primary text |
-| `gray` | `rgba(246,239,221,0.52)` | Muted text (min legible alpha — do not lower) |
-| `teal`/`green` | `#62B58A` | Positive, surplus, additive primary actions |
-| `red` | `#E08A6B` warm clay | **Danger only**: over-budget, destructive, errors. Never selection/active/decoration |
-| `blue` | `#86B2CC` | Info banners/chips |
-| `amber`/`marigold` | `#DDA528` | Wins, milestones, warnings. Never general chrome |
-| `border` | `rgba(255,255,255,0.12)` | Hairlines |
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `bg` | `#101210` | `#F5F4EF` | App bg; also text on filled buttons |
+| `text` | `#F6EFDD` cream | `#26251E` ink | Primary text |
+| `gray` | cream @ .52 | ink @ .55 | Muted text (min legible alpha per theme) |
+| `teal`/`green` (pos) | `#82AEDB` blue | `#33689E` | Positive, surplus, additive actions |
+| `neg` | `#E5A23E` amber | `#9C6A00` | **Negative data only**: over-budget, deficits, actual-vs-plan series |
+| `danger` | `#E08A6B` clay | `#B05A38` | **Destructive only**: delete, reset, errors. Never data |
+| `blue` (info) | `#9FB0BC` slate | `#5C7282` | Info banners/chips |
+| `amber`/`marigold` | `#DDA528` | `#A87B12` | Wins, milestones, brand dot. Never general chrome |
+| `sel` / `selBg` | cream .75 / .14 | ink .55 / .08 | Selection/active states |
+| `scrim` | black .65 | ink .35 | Modal overlays |
 
-Each hue has `*Light` (~0.16α bg) and `*Mid` (~0.35α border) variants.
+Each semantic hue has `*Light` (tint bg) and `*Mid` (border) variants, re-derived per theme (alphas composite differently on white — never mirror them).
 
 ### Semantic rules (hard-won — do not regress)
-1. **Selection ≠ danger.** Active/selected state = cream: border `rgba(246,239,221,0.75)`, bg `rgba(246,239,221,0.14)`, text cream. (Year pills, week picker, active tab.)
-2. **Filled buttons use dark text** (`C.bg`), never `#fff` (fails contrast on teal/clay).
-3. Additive actions (Add/Log/Import/Save) = filled `C.teal`. Destructive (Remove/Reset/Delete) = clay ghost (`redLight` bg, `redMid` border, `red` text) in confirmations; filled clay only for low-stakes reversible removes.
-4. Disabled = `C.surface` bg + `C.gray` text + `cursor:not-allowed`. Every submit is disabled-until-valid — no silent `return` on click.
-5. Color is never the only signal: pair with labels, chips (`Pill`), +/− signs, % values.
+1. **Selection ≠ danger ≠ negative.** Active/selected = `sel`/`selBg` (cream on dark, ink on light). Drag targets too.
+2. **Blue vs amber is the data pair** — chosen to be distinguishable under deuteranopia/protanopia. Color is never the only signal: always pair with +/− signs, labels, or chips.
+3. **Clay is destructive-affordance only** (filled for low-stakes removes, ghost in confirmations) — it must never mark data.
+4. **Filled buttons use dark text** (`C.bg`), never `#fff`.
+5. Disabled = `C.surface` bg + `C.gray` text + `cursor:not-allowed`. Every submit is disabled-until-valid.
 
 ## Charts
-`CHART_COLORS` ordered so no two neighbours share a hue family:
-`#62B58A, #DDA528, #86B2CC, #7C8471, #B6C7AE, #C8A84B, #4A9068, #F6EFDD, #5A9A72, #8FB89A`.
-All Recharts `<Tooltip>` use `separator=": "` + `glassTooltip` background. Area-chart `dot` renderers must read `p.payload.<key>` (Recharts passes `value` as an array for areas).
+`CHART_COLORS` is theme-swapped in place; both palettes keep the "no adjacent hue families" order; light's cream slot becomes ink. All Recharts `<Tooltip>` use `{...tipProps()}` — a *function* (C mutates on theme swap; never capture its values in module-level constants). Area-chart `dot` renderers must read `p.payload.<key>`.
+
+## Icons (`Icon` component)
+Ring-derived line icons: 20×20 grid, stroke 1.4, round caps/joins, `currentColor`. The marigold dot appears only on `savings` and `live`. Category icons render in rows tinted with the category's chart color; unknown (custom) categories fall back to a plain ring. Exception: `BRANDS` letter-tiles keep their glyphs (third-party content, not UI chrome). `RingProgress` (circular, marigold dot at 100%) is for goals; budget/weekly bars stay linear.
 
 ## Money formatting
-- `fmt` — whole dollars, **plans/budgets only** (integers by construction)
-- `fmtA` / `fmtSA` — actual money (entries, totals, imports): shows cents when present, never rounds real transactions
+- `fmt` — whole dollars, plans/budgets only
+- `fmtA` / `fmtSA` — actual money: shows cents when present, never rounds real transactions
 - `fmtD` — always 2 decimals
-Rule: a number the user typed or a bank reported must never display rounded.
+- Newsreader (serif) on display money ≥ ~16px (MetricTile values, balance figures); small inline amounts stay Inter.
 
 ## Typography
-- Newsreader 400/500 (real 600/700 loaded): money, wordmark, MetricTile values
-- Inter 200–500: everything else
-- Offline PWA: fonts must be self-hosted before adding any new family
+Inter + Newsreader **variable woff2, self-hosted in `/fonts`** (SIL OFL, license alongside). No external font requests — required for the offline PWA. `font-display: swap`, preloaded in `<head>`.
 
-## Glass surface recipe
-`backdrop-filter: blur(22px) saturate(1.35); background: rgba(246,239,221,0.13); border: 1px solid rgba(255,255,255,0.22); border-radius: 24px`. Card top accent (`accent` prop, 3px) must encode meaning (e.g. surplus teal / deficit clay on Aid year cards) — never decoration.
+## Glass system — 3 tiers only
+| Tier | Recipe | Used by |
+|---|---|---|
+| G1 `.mc` | blur(40px) sat(180%), `--glass-card`, r22 | Cards, MetricTile, tab bar (r32 pill exception) |
+| G2 `.mm` | blur(50px) sat(200%), `--glass-modal`, r16 | Modals, dropdowns |
+| G3 inline | blur(20px), tint or `C.glassTooltip`, r12 | Banners, tooltips, InfoTip, sticky headers, goal tiles |
+
+Scrims stay blur(14px) + `C.scrim`. Shadows are themed (`--shadow-card`, `--shadow-card-hover`, `--shadow-modal`). Radius scale: **8 / 12 / 16 / 22 / pill** (3–4 allowed for micro swatches). View glass via server only — `backdrop-filter` breaks on `file://`.
 
 ## Layout
 - Page-level grids: `repeat(auto-fit, minmax(min(100%,300px),1fr))` — never hard `1fr 1fr`
-- Card header rows that hold pills/buttons: `flexWrap:"wrap"` so controls never overflow the card
-- Tab bar `<600px`: scrolls with right-edge mask fade, hidden scrollbar (`.tabbar`)
+- Card header rows that hold pills/buttons: `flexWrap:"wrap"`
+- Scrollable tables get `className="scrollx"` (right-edge fade < 600px, like `.tabbar`)
 
 ## UX copy
-- Sentence case everywhere; em-dash asides; second person ("your grant")
-- Pluralize all counts (`n===1?"entry":"entries"`)
-- Year ranges with apostrophes: `Aug '26 – Aug '27`
-- Empty states teach the next action ("No entries yet — log your first expense above.")
-- Errors: inline `role="alert"` boxes (clay tint), never `alert()`; say what to fix
+- Sentence case; em-dash asides; second person ("your grant")
+- **No school-specific copy** — the app is school-agnostic in all visible text (user's own data like housing notes is fine)
+- Pluralize all counts; year ranges `Aug '26 – Aug '27`
+- Empty states use `<EmptyState>` (ring watermark + teach copy)
+- Errors: inline `role="alert"` boxes (clay tint), never `alert()`
+- Modals: `Modal` provides `role="dialog"`, focus trap, Esc-to-close — don't hand-roll overlays
