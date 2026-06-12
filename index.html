@@ -53,7 +53,6 @@
     --focus-ring: rgba(130,174,219,0.85);
     --accent: #82AEDB;
     --color-scheme: dark;
-    --date-icon-filter: invert(0.88) sepia(0.18) saturate(0.5) brightness(1.25);
     --select-caret: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23F6EFDD' stroke-opacity='0.55' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
     --glass-card: rgba(246,239,221,0.07);
     --glass-card-fallback: #1A1C18;
@@ -89,7 +88,6 @@
     --focus-ring: rgba(51,104,158,0.80);
     --accent: #33689E;
     --color-scheme: light;
-    --date-icon-filter: invert(0.25) sepia(0.15) saturate(0.4);
     --select-caret: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%2326251E' stroke-opacity='0.6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
     --glass-card: rgba(255,255,255,0.42);
     --glass-card-fallback: #F2F0E8;
@@ -136,7 +134,6 @@
   input, select, textarea { color-scheme: var(--color-scheme); }
   /* Form controls don't inherit the body font by default — keep everything in Inter */
   input, select, textarea, button { font-family: inherit; }
-  input[type="date"]::-webkit-datetime-edit { font-family: inherit; }
   /* ── Glass inputs — override all inline background:C.bg on form controls ── */
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   select, textarea {
@@ -157,18 +154,6 @@
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-  /* Soften the native date-picker calendar icon so it reads as part of the UI, not a stock browser control */
-  input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: var(--date-icon-filter);
-    opacity: 0.75; cursor: pointer; transition: opacity .15s;
-  }
-  input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
-  /* Date field text reads as part of the UI, not a stock browser control */
-  input[type="date"]::-webkit-datetime-edit { color: var(--text); }
-  input[type="date"]::-webkit-datetime-edit-fields-wrapper { color: var(--text); }
-  input[type="date"]::-webkit-datetime-edit-text { color: var(--text-soft); padding: 0 1px; }
-  /* Empty (unset) date fields render as muted placeholders */
-  input[type="date"]:invalid::-webkit-datetime-edit { color: var(--text-faint); }
 
   /* Tooltip entrance — short, origin-aware (Emil) */
   @keyframes tipIn {
@@ -214,6 +199,9 @@
   /* ── Ambient blob background ── */
   .blob-layer {
     position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0;
+    /* Pin to its own compositor layer — without this, scrolling repaints the blurred
+       gradients and the top of the page flickers at scroll extremes */
+    transform: translateZ(0); backface-visibility: hidden;
   }
   .blob {
     position: absolute; border-radius: 50%; will-change: transform;
@@ -712,6 +700,8 @@ const tipProps = () => ({
   contentStyle:{background:C.glassTooltip,color:C.text,border:`1px solid ${C.borderDark}`,borderRadius:12,fontSize:12,padding:"8px 12px",boxShadow:"0 8px 24px rgba(0,0,0,0.22)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"},
   // Hover cursor: bars get a soft selection wash, line charts a muted guide — never the stock grey
   cursor:{fill:C.selBg,stroke:C.borderDark},
+  // Track the pointer 1:1 — the default 400ms position ease makes the box trail the cursor
+  isAnimationActive:false,
 });
 
 // ── SVG brand icons (inline, no external deps) ────────────────────────────────
@@ -864,6 +854,7 @@ const ICONS = {
   social:   () => <><circle cx="7.4" cy="10" r="4.6"/><circle cx="12.6" cy="10" r="4.6"/></>,
   subs:     () => <><path d="M15.9 10.6a6 6 0 1 1-1.7-4.8"/><path d="M16.2 3.6v2.6h-2.6"/></>,
   settings: () => <><path d="M4 6.6h12M4 13.4h12"/><circle cx="8" cy="6.6" r="1.7"/><circle cx="12.2" cy="13.4" r="1.7"/></>,
+  calendar: () => <><rect x="3.6" y="5" width="12.8" height="11" rx="1.6"/><path d="M3.6 8.6h12.8M7 3.4v2.6M13 3.4v2.6"/></>,
   // Custom-category choices — same ring language (20×20, round caps)
   coffee:   () => <><path d="M4.6 8h8.8v4a3.6 3.6 0 0 1-3.6 3.6H8.2A3.6 3.6 0 0 1 4.6 12Z"/><path d="M13.4 9h1a1.7 1.7 0 0 1 0 3.4h-1"/><path d="M7.4 4.4c0 .9.8 1.1.8 2M10.4 4.4c0 .9.8 1.1.8 2"/></>,
   health:   () => <><circle cx="10" cy="10" r="6.5"/><path d="M10 7.2v5.6M7.2 10h5.6"/></>,
@@ -1024,7 +1015,7 @@ const Pill = ({ok, warn, neutral, children, sm}) => {
 };
 
 // Shared ghost ✕ — remove/close affordances stay quiet (no border, no fill) until hovered
-const XBtn = ({onClick, label, title, size=26, danger=false, iconSize=12}) => (
+const XBtn = ({onClick, label, title, size=28, danger=false, iconSize=14}) => (
   <button aria-label={label} title={title||label} onClick={onClick}
     className={`xbtn${danger?' xbtn-danger':''}`}
     style={{width:size,height:size,borderRadius:size/2,border:"none",background:"transparent",
@@ -1047,13 +1038,13 @@ const Card = ({children, style={}, primary=false}) => (
 );
 
 // Category icon in a tinted chip — keeps the chart-color link, reads at a glance
-const CatIcon = ({name, color, size=26}) => {
+const CatIcon = ({name, color, size=30}) => {
   const hex = color && color.startsWith("#");
   return (
-    <span aria-hidden="true" style={{width:size,height:size,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-      background: hex ? color+"24" : C.surfaceMid,
-      border: `1px solid ${hex ? color+"3D" : C.border}`}}>
-      <Icon name={name} size={Math.round(size*0.62)} color={hex?color:C.gray} strokeWidth={1.6}/>
+    <span aria-hidden="true" style={{width:size,height:size,borderRadius:9,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+      background: hex ? color+"2E" : C.surfaceMid,
+      border: `1px solid ${hex ? color+"4D" : C.border}`}}>
+      <Icon name={name} size={Math.round(size*0.66)} color={hex?color:C.gray} strokeWidth={1.9}/>
     </span>
   );
 };
@@ -1081,20 +1072,133 @@ const CatIconPicker = ({value, onChange}) => (
 // Glass month dropdown — replaces native <select> (same popover language as the pie range picker)
 const MonthPicker = ({value, onChange}) => {
   const [open, setOpen] = useState(false);
+  const btnRef = React.useRef(null);
+  useLiftCard(open, btnRef);
   return (
     <div style={{position:"relative"}}>
-      <button onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+      <button ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
         {MONTH_FULL[value]} <Icon name="chevron" size={11} style={{opacity:0.6,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
       </button>
       {open && <>
         <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:99}}/>
-        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.glassTooltip,backdropFilter:"blur(50px) saturate(200%)",WebkitBackdropFilter:"blur(50px) saturate(200%)",border:`1px solid ${C.borderDark}`,borderRadius:12,padding:12,zIndex:100,width:220,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"}}>
+        <div style={popoverStyle(220, "right")}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
             {MONTH_NAMES.map((m,mi)=>(
               <button key={mi} onClick={()=>{onChange(mi);setOpen(false);}} style={{padding:"5px 2px",borderRadius:8,border:"none",fontSize:11,fontWeight:mi===value?700:400,background:mi===value?C.selBg:"transparent",color:mi===value?C.text:C.gray,cursor:"pointer",transition:"background 0.1s"}}>
                 {m}
               </button>
             ))}
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+};
+
+// Shared glass popover chrome for the picker family (MonthPicker / PeriodPicker / DateField).
+const popoverStyle = (width, align="left") => ({position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,background:C.glassTooltip,backdropFilter:"blur(50px) saturate(200%)",WebkitBackdropFilter:"blur(50px) saturate(200%)",border:`1px solid ${C.borderDark}`,borderRadius:12,padding:12,zIndex:100,width,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"});
+// Glass cards are stacking contexts, so a popover would paint UNDER the next card.
+// While open, lift the hosting card above its siblings.
+const useLiftCard = (open, ref) => {
+  useEffect(()=>{
+    if(!open || !ref.current) return;
+    const card = ref.current.closest(".mc,.mm");
+    if(!card) return;
+    const prev = card.style.zIndex;
+    card.style.zIndex = 50;
+    return ()=>{ card.style.zIndex = prev; };
+  },[open]);
+};
+
+// Period dropdown for comparisons — pick a full year or a single month within it
+const PeriodPicker = ({value, onChange, yearsList}) => {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = React.useRef(null);
+  const [browseYr, setBrowseYr] = useState(value.ayId);
+  useEffect(()=>{ if(open) setBrowseYr(value.ayId); },[open]);
+  useLiftCard(open, btnRef);
+  const yLabel = id => { const y=yearsList.find(y=>y.id===id); return y ? y.label.split("—")[0].trim() : ""; };
+  const label = value.type==="year" ? yLabel(value.ayId) : `${MONTH_NAMES[value.mi]} · ${yLabel(value.ayId)}`;
+  return (
+    <div style={{position:"relative"}}>
+      <button ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+        {label} <Icon name="chevron" size={11} style={{opacity:0.6,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
+      </button>
+      {open && <>
+        <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:99}}/>
+        <div style={popoverStyle(238)}>
+          <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>
+            {yearsList.map(y=>(
+              <button key={y.id} onClick={()=>setBrowseYr(y.id)} style={{padding:"4px 9px",borderRadius:8,border:"none",fontSize:11,fontWeight:browseYr===y.id?700:400,background:browseYr===y.id?C.selBg:"transparent",color:browseYr===y.id?C.text:C.gray,cursor:"pointer",transition:"background .1s"}}>
+                {y.label.split("—")[0].trim()}
+              </button>
+            ))}
+          </div>
+          <button onClick={()=>{onChange({type:"year",ayId:browseYr,label:yLabel(browseYr)});setOpen(false);}} style={{width:"100%",padding:"6px 8px",borderRadius:8,border:`1px solid ${value.type==="year"&&value.ayId===browseYr?C.sel:C.border}`,background:value.type==="year"&&value.ayId===browseYr?C.selBg:"transparent",color:C.text,fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:8,transition:"all .1s"}}>
+            Full year — {yLabel(browseYr)}
+          </button>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
+            {MONTH_NAMES.map((m,mi)=>{
+              const sel = value.type==="month" && value.ayId===browseYr && value.mi===mi;
+              return (
+                <button key={mi} onClick={()=>{onChange({type:"month",ayId:browseYr,mi,label:`${m} (${yLabel(browseYr)})`});setOpen(false);}} style={{padding:"5px 2px",borderRadius:8,border:"none",fontSize:11,fontWeight:sel?700:400,background:sel?C.selBg:"transparent",color:sel?C.text:C.gray,cursor:"pointer",transition:"background 0.1s"}}>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+};
+
+// Custom date field — native calendar popups can't be themed, so the glass day grid replaces them
+const DateField = ({value, onChange, style={}, ariaLabel="Date"}) => {
+  const [open, setOpen] = useState(false);
+  const btnRef = React.useRef(null);
+  const today = new Date(); const pad = n => String(n).padStart(2,"0");
+  const todayIso = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  const [view, setView] = useState(()=> (value||todayIso).slice(0,7));
+  useEffect(()=>{ if(open) setView((value||todayIso).slice(0,7)); },[open]);
+  useLiftCard(open, btnRef);
+  const [vy, vm] = view.split("-").map(Number);
+  const startOffset = (new Date(vy, vm-1, 1).getDay()+6)%7;   // Monday-start, matches app weeks
+  const daysInMonth = new Date(vy, vm, 0).getDate();
+  const nav = d => { const dt=new Date(vy, vm-1+d, 1); setView(`${dt.getFullYear()}-${pad(dt.getMonth()+1)}`); };
+  const shown = value ? new Date(value+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "Pick a date";
+  return (
+    <div style={{position:"relative"}}>
+      <button ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} aria-label={ariaLabel} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:8,width:"100%",fontSize:13,border:`1px solid ${open?C.sel:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:value?C.text:C.gray,cursor:"pointer",boxSizing:"border-box",textAlign:"left",transition:"border-color .15s",...style}}>
+        <Icon name="calendar" size={14} color={C.gray}/>
+        <span style={{flex:1}}>{shown}</span>
+      </button>
+      {open && <>
+        <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:99}}/>
+        <div style={popoverStyle(248)}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <button onClick={()=>nav(-1)} aria-label="Previous month" style={{width:26,height:26,borderRadius:8,border:"none",background:"transparent",color:C.gray,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}} className="xbtn"><Icon name="chevron" size={13} style={{transform:"rotate(90deg)"}}/></button>
+            <span style={{fontSize:12,fontWeight:600,color:C.text}}>{new Date(vy,vm-1,1).toLocaleDateString("en-US",{month:"long",year:"numeric"})}</span>
+            <button onClick={()=>nav(1)} aria-label="Next month" style={{width:26,height:26,borderRadius:8,border:"none",background:"transparent",color:C.gray,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}} className="xbtn"><Icon name="chevron" size={13} style={{transform:"rotate(-90deg)"}}/></button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
+            {["M","T","W","T","F","S","S"].map((d,i)=><span key={i} style={{fontSize:9,fontWeight:600,color:C.gray,textAlign:"center",letterSpacing:"0.04em"}}>{d}</span>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+            {Array.from({length:startOffset}).map((_,i)=><span key={"b"+i}/>)}
+            {Array.from({length:daysInMonth}).map((_,i)=>{
+              const iso = `${vy}-${pad(vm)}-${pad(i+1)}`;
+              const sel = iso===value, isToday = iso===todayIso;
+              return (
+                <button key={iso} onClick={()=>{onChange(iso);setOpen(false);}} style={{padding:"4px 0",borderRadius:8,border:"none",fontSize:11,fontWeight:sel?700:400,background:sel?C.selBg:"transparent",color:sel?C.text:isToday?C.marigold:C.gray,cursor:"pointer",transition:"background .1s"}}>
+                  {i+1}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={()=>{onChange(todayIso);setOpen(false);}} style={{background:"none",border:"none",color:C.marigold,cursor:"pointer",fontSize:11,fontWeight:600,padding:0}}>Today</button>
           </div>
         </div>
       </>}
@@ -1345,7 +1449,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
         </div>}
         <div style={{marginBottom:20}}>
           <div style={{fontSize:11,color:C.gray,marginBottom:4}}>Next renewal date</div>
-          <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,boxSizing:"border-box"}}/>
+          <DateField value={newDate} onChange={setNewDate} ariaLabel="Renewal date"/>
         </div>
       </>}
       {renewed===false && <Banner type="warn" style={{marginBottom:16}}>This subscription will be removed and your budget updated automatically.</Banner>}
@@ -2155,11 +2259,11 @@ function App() {
         <div style={{fontSize:12,color:C.textMid,marginBottom:14}}>The year number is assigned automatically. Enter the start and end dates for this academic year (end of summer break).</div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,fontWeight:600,color:C.textMid,marginBottom:4}}>Start date</div>
-          <input type="date" value={nyStart} onChange={e=>setNyStart(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text}}/>
+          <DateField value={nyStart} onChange={setNyStart} ariaLabel="Year start date"/>
         </div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:600,color:C.textMid,marginBottom:4}}>End date</div>
-          <input type="date" value={nyEnd} onChange={e=>setNyEnd(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text}}/>
+          <DateField value={nyEnd} onChange={setNyEnd} ariaLabel="Year end date"/>
         </div>
         <button onClick={()=>addYear(nyStart,nyEnd)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.teal,color:C.bg,cursor:"pointer"}}>Add year</button>
       </Modal>}
@@ -2203,7 +2307,7 @@ function App() {
               </div>
               <div>
                 <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Date</div>
-                <input type="date" value={savingsDepositDate} onChange={e=>setSavingsDepositDate(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+                <DateField value={savingsDepositDate} onChange={setSavingsDepositDate} ariaLabel="Deposit date"/>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Note (optional)</div>
@@ -2299,7 +2403,7 @@ function App() {
             </div>
             <div>
               <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Target date (optional)</div>
-              <input type="date" value={newGoalDate} onChange={e=>setNewGoalDate(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              <DateField value={newGoalDate} onChange={setNewGoalDate} ariaLabel="Goal target date"/>
             </div>
             <button onClick={()=>{
               if(!newGoalLabel.trim()||!newGoalTarget) return;
@@ -2758,10 +2862,11 @@ function App() {
             </Banner>
           )}
 
-          {/* Week bar */}
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{flex:1,fontSize:14,fontWeight:600,color:C.text}}>
-              {viewWeek ? fmtWeekLabel(viewWeek) : `This week — ${fmtWeekLabel(currentWeekStart)}`}
+          {/* Week bar — label whispers, the serif date range is the headline (matches display money) */}
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 200px",display:"flex",alignItems:"baseline",gap:9,minWidth:0}}>
+              <span style={{fontSize:10,fontWeight:600,color:C.gray,textTransform:"uppercase",letterSpacing:"0.08em",whiteSpace:"nowrap"}}>{viewWeek?"Archived week":"This week"}</span>
+              <span style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:"-0.01em",fontFamily:"'Newsreader',Georgia,serif",whiteSpace:"nowrap"}}>{fmtWeekLabel(viewWeek||currentWeekStart)}</span>
             </div>
             <button onClick={()=>setShowWeekPicker(true)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
               Browse weeks {archives.length>0&&`(${archives.length} archived)`}
@@ -2794,8 +2899,7 @@ function App() {
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Date</div>
-                  <input type="date" value={wDate} onChange={e=>setWDate(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${isOtherWeekDate?C.amber:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+                  <DateField value={wDate} onChange={setWDate} ariaLabel="Expense date" style={isOtherWeekDate?{border:`1px solid ${C.amber}`}:{}}/>
                   {isOtherWeekDate && <div style={{fontSize:11,color:C.amber,marginTop:4,fontWeight:500}}>{isFutureWeekDate?"Future date —":"Past date —"} will be filed to week of {getMonday(wDate)}</div>}
                 </div>
                 <div>
@@ -3248,18 +3352,13 @@ function App() {
                 return {name:c.label,A:a,B:b,delta:b-a,color:CHART_COLORS[i%CHART_COLORS.length]};
               }).filter(r=>r.A>0||r.B>0);
 
-              const selStyle={fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:"rgba(255,255,255,0.07)",color:C.text,cursor:"pointer"};
               return (
                 <Card>
                   <SectionTitle>Comparison</SectionTitle>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-                    <select value={JSON.stringify(compareA||defaultA)} onChange={e=>setCompareA(JSON.parse(e.target.value))} style={selStyle}>
-                      {periodOptions.map((p,i)=><option key={i} value={JSON.stringify(p)}>{p.label}</option>)}
-                    </select>
+                    <PeriodPicker value={compareA||defaultA} onChange={setCompareA} yearsList={data.years}/>
                     <span style={{fontSize:13,color:C.gray}}>vs</span>
-                    <select value={JSON.stringify(compareB||defaultB)} onChange={e=>setCompareB(JSON.parse(e.target.value))} style={selStyle}>
-                      {periodOptions.map((p,i)=><option key={i} value={JSON.stringify(p)}>{p.label}</option>)}
-                    </select>
+                    <PeriodPicker value={compareB||defaultB} onChange={setCompareB} yearsList={data.years}/>
                   </div>
                   {cmpData.length===0
                     ? <div style={{textAlign:"center",padding:"28px 16px",fontSize:12,color:C.textMid,border:`1px dashed ${C.borderDark}`,borderRadius:12,background:C.surface}}>No spending logged for either period — entries will appear here once you log them.</div>
@@ -3409,7 +3508,7 @@ function App() {
                       <div style={{display:"flex",gap:16,marginTop:10,flexWrap:"wrap"}}>
                         <div>
                           <div style={{fontSize:10,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Exam date</div>
-                          <input type="date" value={g.targetDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetDate=e.target.value;upd(d);}} style={{fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",background:C.bg,color:C.text}}/>
+                          <DateField value={g.targetDate||""} onChange={v=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetDate=v;upd(d);}} ariaLabel={"Target date for "+g.label} style={{width:"auto",fontSize:12,padding:"4px 8px"}}/>
                         </div>
                         <div>
                           <div style={{fontSize:10,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Funded by (projected)</div>
@@ -3661,19 +3760,18 @@ function App() {
               const moD=(disb+oth)/12,moSp=moTotal({...y.monthly,subs:subsMo}),moS=moD-moSp;
               return (
                 <Card key={y.id}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8,rowGap:10}}>
+                  {/* Pinned top-right so it never wraps down beside the pill */}
+                  {data.years.length>1 && <div style={{position:"absolute",top:12,right:12,zIndex:1}}><XBtn label="Remove year" onClick={()=>setConfirmYearRemove(y.id)} size={30}/></div>}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8,rowGap:10,paddingRight:data.years.length>1?34:0}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:14,color:C.text}}>{y.label}</div>
                       <div style={{display:"flex",gap:6,marginTop:6,alignItems:"center",flexWrap:"wrap"}}>
-                        <input type="date" value={y.startDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].startDate=e.target.value;upd(d);}} style={{fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:C.bg,color:C.text}}/>
+                        <DateField value={y.startDate||""} onChange={v=>{const d=JSON.parse(JSON.stringify(data));d.years[i].startDate=v;upd(d);}} ariaLabel="Year start date" style={{width:"auto",fontSize:12,padding:"5px 8px"}}/>
                         <span style={{fontSize:11,color:C.gray}}>→</span>
-                        <input type="date" value={y.endDate||""} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].endDate=e.target.value;upd(d);}} style={{fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:C.bg,color:C.text}}/>
+                        <DateField value={y.endDate||""} onChange={v=>{const d=JSON.parse(JSON.stringify(data));d.years[i].endDate=v;upd(d);}} ariaLabel="Year end date" style={{width:"auto",fontSize:12,padding:"5px 8px"}}/>
                       </div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <Pill ok={moS>=0} warn={moS<0}>{fmtS(moS)}/mo</Pill>
-                      {data.years.length>1 && <XBtn label="Remove year" onClick={()=>setConfirmYearRemove(y.id)} size={28}/>}
-                    </div>
+                    <Pill ok={moS>=0} warn={moS<0}>{fmtS(moS)}/mo</Pill>
                   </div>
                   {y.type==="extended" && <Banner type="warn">Extended year: tuition waived, fees only</Banner>}
                   {[
@@ -3817,8 +3915,7 @@ function App() {
                 </div>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Next renewal date</div>
-                  <input type="date" value={subRenew} onChange={e=>setSubRenew(e.target.value)}
-                    style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,boxSizing:"border-box"}}/>
+                  <DateField value={subRenew} onChange={setSubRenew} ariaLabel="Next renewal date"/>
                 </div>
                 <div style={{display:"flex",gap:8,marginTop:2}}>
                   <button onClick={saveSub} disabled={!subName.trim()||!(parseFloat(subAmt)>0)} style={{flex:1,padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!subName.trim()||!(parseFloat(subAmt)>0))?C.surface:C.teal,color:(!subName.trim()||!(parseFloat(subAmt)>0))?C.gray:C.bg,cursor:(!subName.trim()||!(parseFloat(subAmt)>0))?"not-allowed":"pointer"}}>

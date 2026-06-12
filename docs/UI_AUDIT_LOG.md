@@ -2,6 +2,20 @@
 
 Newest first. One line per finding: severity · what · fix.
 
+## 2026-06-11 (fourth pass) — User feedback round 3 (8 items)
+
+- **P1 · Native date-picker calendar popup can't be themed** → custom `DateField` (glass day grid, Monday-start, marigold today, "Today" shortcut) replaced all 9 native date inputs; dead `::-webkit-calendar-picker` CSS removed.
+- **P1 · Tooltip trailed the cursor** → `isAnimationActive:false` in `tipProps()` (Recharts animates tooltip position 400ms by default).
+- **P2 · Comparison still used native selects** → `PeriodPicker` glass popover (year pills + full-year + month grid).
+- **P2 · Picker popovers painted under the next card** (cards are stacking contexts) → `useLiftCard` bumps the hosting card to z-50 while open. (First tried fixed-position anchoring — flaky under layout shift; reverted.)
+- **P2 · Aid-card ✕ wrapped down beside the surplus pill** → pinned absolute top-right; XBtn default 28px / 14px icon (was 26/12).
+- **P2 · Category icon chips too small/thin** → 26→30px chip, stroke 1.6→1.9, stronger tint.
+- **P2 · "This week — Jun 8 – Jun 14" read as plain text** → caps whisper label + 20px serif date range (matches display-money language).
+- **P3 · Flicker at top when scrolled to bottom** → blob layer pinned to its own compositor layer (`translateZ(0)` + `backface-visibility:hidden`).
+- **Note**: "gray bar on hover" + "title confusion" on the live site were a stale deploy — the previous two passes were committed/pushed at the start of this round.
+
+Verified: DateField popover + day selection (Weekly), PeriodPicker open/clamp/selection over sibling cards, week header, no console errors.
+
 ## 2026-06-11 (third pass) — User feedback round 2 (11 items)
 
 - **P1 · Boot was a bare "Loading…" line** → full boot moment: staggered ring bloom, orbiting marigold dot, serif "Marro." fade-up; pure CSS so it runs before React/Babel; reduced-motion safe.

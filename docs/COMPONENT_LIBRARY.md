@@ -12,6 +12,9 @@ Shared components in `index.html`. Reuse these — don't restyle ad hoc.
 - **`YrBtn`** — segmented-pill sibling of TabBtn (active = cream pill + ink); lives in a `.tabbar` glass pill; active year's date range rendered once beside the pill via `yrRangeLabel`.
 - **`XBtn`** — the ONLY ✕ affordance: ghost circle (no border/fill until hover), `label` required, `danger` prop for clay. Never hand-roll a boxed ✕.
 - **`MonthPicker`** — glass popover month grid replacing native month `<select>`s (selection = `sel`/`selBg`, never a semantic hue).
+- **`PeriodPicker`** — comparison-period popover: year pills + "Full year" + month grid; value shape `{type:"year"|"month", ayId, mi?, label}`.
+- **`DateField`** — replaces ALL native `<input type="date">` (native calendar popups can't be themed): calendar-icon button + glass day grid (Monday-start, today in marigold, "Today" shortcut). Never reintroduce a native date input.
+- **Popover rule** — pickers use `popoverStyle(width, align)` + `useLiftCard`: cards are stacking contexts, so the hosting `.mc/.mm` gets `z-index:50` while a popover is open or it paints under the next card.
 - **`CatIconPicker`** + `CAT_ICON_CHOICES` (20 ring-language icons) — collapsed behind an icon-preview button in add flows; existing category icons editable via popover in Categories tab (`editIconCat`).
 - **Settings menu** — header gear → glass popover (`menu-row` hover class): theme toggle, Reset defaults (clay). New "app-level" actions belong here, not as loose header buttons.
 - **`ProgressBar`** — track `rgba(255,255,255,0.16)`, animated width .4s.
