@@ -13,7 +13,7 @@ Neutral warm canvas under liquid glass — near-black dark theme, warm off-white
 ## Color tokens (C object)
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `bg` | `#101210` | `#F5F4EF` | App bg; also text on filled buttons |
+| `bg` | `#101210` | `#ECEAE2` | App bg; also text on filled buttons |
 | `text` | `#F6EFDD` cream | `#26251E` ink | Primary text |
 | `gray` | cream @ .52 | ink @ .55 | Muted text (min legible alpha per theme) |
 | `teal`/`green` (pos) | `#82AEDB` blue | `#33689E` | Positive, surplus, additive actions |
@@ -34,10 +34,10 @@ Each semantic hue has `*Light` (tint bg) and `*Mid` (border) variants, re-derive
 5. Disabled = `C.surface` bg + `C.gray` text + `cursor:not-allowed`. Every submit is disabled-until-valid.
 
 ## Charts
-`CHART_COLORS` is theme-swapped in place; both palettes keep the "no adjacent hue families" order; light's cream slot becomes ink. All Recharts `<Tooltip>` use `{...tipProps()}` — a *function* (C mutates on theme swap; never capture its values in module-level constants). Area-chart `dot` renderers must read `p.payload.<key>`.
+`CHART_COLORS` is theme-swapped in place; both palettes keep the "no adjacent hue families" order; light's cream slot becomes ink. All Recharts `<Tooltip>` use `{...tipProps()}` — a *function* (C mutates on theme swap; never capture its values in module-level constants); it also themes the hover `cursor` (selBg wash, never stock grey). Area-chart `dot` renderers must read `p.payload.<key>`. Friendly-chart rules: bars `radius [6,6,0,0]`, `maxBarSize 26`; the planned-breakdown donut uses `cornerRadius 5` and an in-center hover readout (`pieHover` state, no floating tooltip) with serif money.
 
 ## Icons (`Icon` component)
-Ring-derived line icons: 20×20 grid, stroke 1.4, round caps/joins, `currentColor`. The marigold dot appears only on `savings` and `live`. Category icons render in rows tinted with the category's chart color; unknown (custom) categories fall back to a plain ring. Exception: `BRANDS` letter-tiles keep their glyphs (third-party content, not UI chrome). `RingProgress` (circular, marigold dot at 100%) is for goals; budget/weekly bars stay linear.
+Ring-derived line icons: 20×20 grid, stroke 1.4, round caps/joins, `currentColor`. The marigold dot appears only on `savings` and `live`. Category icons render in rows tinted with the category's chart color; custom categories carry an `icon` field chosen at creation via `CatIconPicker` (`CAT_ICON_CHOICES`, ring fallback `dot`) — render with `cat.icon||cat.id`. Exception: `BRANDS` letter-tiles keep their glyphs (third-party content, not UI chrome). `RingProgress` (circular, marigold dot at 100%) is for goals; budget/weekly bars stay linear.
 
 ## Money formatting
 - `fmt` — whole dollars, plans/budgets only
