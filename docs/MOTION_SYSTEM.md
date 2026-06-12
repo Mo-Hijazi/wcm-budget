@@ -8,7 +8,7 @@ Motion conveys state, never decoration (product register). 150–250ms, ease-out
   - *low-tide* (`.blobs-over`, month over budget) — muted cold grays
   - *bloom* (`.blobs-bloom`, goal newly fully funded) — marigold swell for ~9s (`triggerBloom`)
   - States are stacked gradient pseudo-layers crossfaded by **opacity only** (2.4s ease-in-out); gradients are never animated.
-- Loading screen: static rings + `loadingPulse` marigold dot (scale/opacity).
+- Boot screen (`#loading`, pre-React, pure CSS): rings bloom in staggered (`bootRing`, 50/180/310ms delays), marigold core breathes (`bootBreathe`), a marigold dot orbits the middle ring (`bootSpin` 2.6s linear, radius ≈22px), "Marro." + sub fade up (`bootFade`). All have reduced-motion fallbacks (orbit hides entirely).
 - Logo rings: `marroRingPop` staggered entrance + `marroDotPulse`.
 - `tipIn` (InfoTip): scale+fade, origin bottom-center, after 140ms hover intent.
 - ProgressBar width .4s; RingProgress stroke-dasharray .4s ease-out.
