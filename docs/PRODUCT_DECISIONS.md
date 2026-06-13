@@ -31,3 +31,11 @@ Decision · rationale · date.
 - **Custom categories pick a ring-set icon at creation** (`dot` fallback keeps old data valid; icon stored on the category, synced like any field). (2026-06-11)
 - **Light mode is toned parchment, not white** — `#ECEAE2`, no brightness boost on glass; "light" must still feel like the same candlelit object. (2026-06-11)
 - **Single-file architecture stays** until Phase 2.5b (auth + Supabase); no build step is a feature for this project. (ongoing)
+
+## Phase 2.5b — Auth + Supabase (2026-06-13)
+- **Hard login gate** — app requires Google sign-in; no anonymous/local-only mode. One code path, per-user data from day one. (2026-06-13)
+- **Keep the blob model** — one jsonb `state` per user in `app_state`, not normalized tables. The 3-way merge engine is transport-agnostic, so Supabase only replaced the Gist transport (`gistFetch/gistWrite` → `stateFetch/stateWrite`); `save`/`checkAndPull`/`resolveConflict`/ConflictModal untouched. Normalizing is a Phase-6 concern, not now. (2026-06-13)
+- **localStorage stays as offline cache + merge ancestor; no Realtime** — existing focus/30s polling is enough; Realtime would add a websocket dependency and failure modes for a tiny user base. (2026-06-13)
+- **Anon (publishable) key hardcoded in the public repo** — security is RLS, not key secrecy; no build step means env vars aren't an option client-side anyway. Service-role key + Google client secret never in repo. (2026-06-13)
+- **School via searchable picker + free-text Other** in a one-time, non-dismissable ProfileModal after first login — clean data for Phase 3/6 benchmarking; embedded curated US MD/DO list (expand to full AAMC/AACOM before public launch). (2026-06-13)
+- **Single-file architecture survives 2.5b** — supabase-js loads as a CDN UMD global alongside React/Recharts; still no build step. (2026-06-13)

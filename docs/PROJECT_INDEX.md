@@ -3,8 +3,8 @@
 Budget planner for a WCM MD student (Class of 2030, extended curriculum). Tracks grant disbursement vs planned vs actual spending across 5 academic years.
 
 ## Stack & deploy
-- Single file: `index.html` (~3.4k lines) — React 18 + Babel standalone + Recharts 2.5, no build step
-- Offline PWA (`sw.js`, `manifest.json`); storage `localStorage wcm_v8` + GitHub Gist sync via `api/sync.js` (Vercel serverless)
+- Single file: `index.html` (~3.5k lines) — React 18 + Babel standalone + Recharts 2.5 + supabase-js 2 (all CDN), no build step
+- Offline PWA (`sw.js`, `manifest.json`); **Supabase auth (Google) + per-user `app_state`/`profiles` tables** are the source of truth; `localStorage wcm_v8` is the offline cache + merge ancestor. (Old Gist sync `api/sync.js` deleted in Phase 2.5b.) See `DATA_MODEL.md`.
 - Push to `main` → Vercel auto-deploy → https://wcm-budget.vercel.app
 - Local dev: `python3 -m http.server 3456 --directory .` (see `launch.json`)
 
@@ -14,6 +14,9 @@ Don't scan the file; `grep -n` the key for the section you need. Keys are stable
 | Area | Grep key |
 |---|---|
 | CSS (glass, tabbar fade, focus, date-field theming) | `<style>` (first hit) |
+| Supabase client + transport (auth/data) | `const sb` / `const stateFetch` |
+| Login gate / school picker (auth UI) | `const LoginScreen` / `const ProfileModal` / `US_MED_SCHOOLS` |
+| Auth session state + boot effect | `const [session` / `onAuthStateChange` |
 | Sync merge engine (diff/conflict/apply utils) | `function diffStates` |
 | Color tokens + chart palette | `const C = ` then `CHART_COLORS` |
 | Year configs / default state | `YEAR_CONFIGS` / `const DEFAULT_STATE` |
