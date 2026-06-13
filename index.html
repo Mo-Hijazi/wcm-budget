@@ -376,47 +376,37 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
 <script src="https://unpkg.com/recharts@2.5.0/umd/Recharts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script type="text/babel" data-presets="react">
 window.storage={get:async(key)=>{try{const v=localStorage.getItem(key);return v?{key,value:v}:null}catch{return null}},set:async(key,value)=>{try{localStorage.setItem(key,value);return{key,value}}catch{return null}},delete:async(key)=>{try{localStorage.removeItem(key);return{key,deleted:true}}catch{return null}},list:async(prefix)=>{try{return{keys:Object.keys(localStorage).filter(k=>!prefix||k.startsWith(prefix))}}catch{return{keys:[]}}}};
 const{PieChart,Pie,Cell,BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,LineChart,Line,AreaChart,Area,Legend,ReferenceLine,ComposedChart}=Recharts;
 
-// ── GitHub Gist sync (via /api/sync serverless proxy — token never in browser) ─
-const GIST_ID_KEY = "wcm_gist_id";
+// ── Supabase client (auth + per-user data) ─────────────────────────────────────
+// URL + anon key are safe to ship in client code — access is gated entirely by
+// Row Level Security. The service-role key is never used here. No build step, so
+// these are plain consts (no env vars). The UMD global is literally `supabase`;
+// the client is named `sb` so it doesn't shadow it.
+const SUPABASE_URL      = "https://rjowpekykqlounnaegwn.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Kp89EOIm88PDospinCz-eA_wDs09kjq"; // publishable key — safe in client (RLS-gated)
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{flowType:"pkce"}});
 
-const gistFetch = async () => {
-  const id = localStorage.getItem(GIST_ID_KEY);
+// ── Supabase sync (per-user row in app_state, RLS-gated) ─────────────────────────
+// Transport-only replacement for the old Gist proxy: same string-in / string-out,
+// null-on-failure contract, so the 3-way merge engine below is untouched.
+const stateFetch = async () => {           // → JSON string | null  (null = no row OR error/offline)
   try {
-    if(id) {
-      // Try the cached ID first
-      const r = await fetch(`/api/sync?id=${id}`);
-      if(r.ok) {
-        const j = await r.json();
-        if(j.content) return j.content;
-      }
-      // Cached ID failed — clear it and fall through to discovery
-      localStorage.removeItem(GIST_ID_KEY);
-    }
-    // Discovery mode: server scans gist list to find the app data gist
-    const r = await fetch(`/api/sync`);
-    if(!r.ok) return null;
-    const j = await r.json();
-    if(j.id) localStorage.setItem(GIST_ID_KEY, j.id);
-    return j.content || null;
+    const {data, error} = await sb.from("app_state").select("state").maybeSingle();
+    if(error || !data) return null;
+    return JSON.stringify(data.state);
   } catch { return null; }
 };
 
-const gistWrite = async (content) => {
-  const id = localStorage.getItem(GIST_ID_KEY) || null;
+const stateWrite = async (content) => {    // → boolean (true = persisted)
   try {
-    const r = await fetch("/api/sync", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({id, content})
-    });
-    if(!r.ok) return false;
-    const j = await r.json();
-    if(j.id) localStorage.setItem(GIST_ID_KEY, j.id);
-    return true;
+    const {data:{user}} = await sb.auth.getUser();
+    if(!user) return false;
+    const {error} = await sb.from("app_state").upsert({user_id:user.id, state:JSON.parse(content)});
+    return !error;
   } catch { return false; }
 };
 
@@ -692,6 +682,10 @@ const applyTheme = (dark) => {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = t.bg;
 };
+// Sync C to the FOUC guard's resolved theme at module load, so screens that render
+// before app data loads (LoginScreen) use the right tokens. The data-driven
+// useEffect re-applies on load + toggle.
+applyTheme(document.documentElement.dataset.theme !== "light");
 // Shared Recharts tooltip styling (G3 glass tier). A function, not a constant:
 // C mutates on theme swap, so styles must be rebuilt per render.
 const tipProps = () => ({
@@ -1338,6 +1332,327 @@ const MarroLogo = ({size=54}) => (
   </div>
 );
 
+// ── Login gate ──────────────────────────────────────────────────────────────
+// Shown when there is no Supabase session. Hard gate: no anonymous/local mode.
+const GoogleGlyph = ({size=18}) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" style={{flexShrink:0}}>
+    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8a12 12 0 1 1 0-24c3.1 0 5.9 1.2 8 3.1l5.7-5.7A20 20 0 1 0 24 44c11 0 20-8 20-20 0-1.3-.1-2.3-.4-3.5z"/>
+    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8A12 12 0 0 1 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7A20 20 0 0 0 6.3 14.7z"/>
+    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5A20 20 0 0 0 24 44z"/>
+    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C40 35.7 44 30.3 44 24c0-1.3-.1-2.3-.4-3.5z"/>
+  </svg>
+);
+const LoginScreen = ({offline}) => (
+  <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div className="mm" style={{maxWidth:380,width:"100%",padding:"36px 32px",borderRadius:20,textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.30)"}}>
+      <div style={{display:"flex",justifyContent:"center",marginBottom:18}}><MarroLogo size={64}/></div>
+      <div style={{fontSize:30,fontWeight:600,color:C.text,letterSpacing:"-0.02em",lineHeight:1.1,fontFamily:"'Newsreader', Georgia, serif"}}>Marro<span style={{color:C.marigold}}>.</span></div>
+      <div style={{fontSize:13,color:C.gray,marginTop:8,marginBottom:26,lineHeight:1.5}}>Your medical school budget companion. Sign in to sync across your devices.</div>
+      <button
+        disabled={offline}
+        onClick={()=>sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}})}
+        style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"12px 16px",borderRadius:10,border:`1px solid ${C.borderDark}`,background:offline?"transparent":C.selBg,color:C.text,fontSize:14,fontWeight:600,cursor:offline?"not-allowed":"pointer",opacity:offline?0.5:1,transition:"all .15s"}}>
+        <GoogleGlyph/> Continue with Google
+      </button>
+      {offline && <div style={{fontSize:12,color:C.amber,marginTop:14}}>You're offline — reconnect to sign in.</div>}
+    </div>
+  </div>
+);
+
+// US medical schools — full LCME (MD) + COCA (DO) sets, sourced from Wikipedia's
+// "List of medical schools in the United States" and "List of osteopathic medical schools".
+// Each entry is {name} or {name, campuses:[...]} for schools with multiple campuses
+// (the picker asks which campus; stored as "Name — Campus"). Free-text "Other" covers gaps.
+const US_MED_SCHOOLS = [
+  // ── MD (LCME) ──
+  {name:"University of Alabama at Birmingham School of Medicine"},
+  {name:"University of South Alabama Frederick P. Whiddon College of Medicine"},
+  {name:"University of Arizona College of Medicine – Tucson"},
+  {name:"University of Arizona College of Medicine – Phoenix"},
+  {name:"Alice L. Walton School of Medicine"},
+  {name:"University of Arkansas for Medical Sciences College of Medicine"},
+  {name:"California Northstate University College of Medicine"},
+  {name:"California University of Science and Medicine"},
+  {name:"Charles R. Drew University of Medicine and Science College of Medicine"},
+  {name:"Kaiser Permanente Bernard J. Tyson School of Medicine"},
+  {name:"University of Southern California Keck School of Medicine"},
+  {name:"Loma Linda University School of Medicine"},
+  {name:"Stanford University School of Medicine"},
+  {name:"University of California, Davis School of Medicine"},
+  {name:"University of California, Irvine School of Medicine"},
+  {name:"University of California, Riverside School of Medicine"},
+  {name:"University of California, San Diego School of Medicine"},
+  {name:"University of California, San Francisco School of Medicine"},
+  {name:"University of California, Los Angeles David Geffen School of Medicine"},
+  {name:"University of Colorado School of Medicine"},
+  {name:"University of Connecticut School of Medicine"},
+  {name:"Quinnipiac University Frank H. Netter MD School of Medicine"},
+  {name:"Yale School of Medicine"},
+  {name:"George Washington University School of Medicine & Health Sciences"},
+  {name:"Georgetown University School of Medicine"},
+  {name:"Howard University College of Medicine"},
+  {name:"Florida International University Herbert Wertheim College of Medicine"},
+  {name:"University of Florida College of Medicine"},
+  {name:"Florida Atlantic University Charles E. Schmidt College of Medicine"},
+  {name:"Florida State University College of Medicine"},
+  {name:"University of Miami Miller School of Medicine"},
+  {name:"Nova Southeastern University Dr. Kiran C. Patel College of Allopathic Medicine"},
+  {name:"University of Central Florida College of Medicine"},
+  {name:"University of South Florida Morsani College of Medicine"},
+  {name:"Emory University School of Medicine"},
+  {name:"Augusta University Medical College of Georgia"},
+  {name:"Mercer University School of Medicine", campuses:["Macon, GA","Savannah, GA","Columbus, GA"]},
+  {name:"Morehouse School of Medicine"},
+  {name:"University of Hawaiʻi at Mānoa John A. Burns School of Medicine"},
+  {name:"Carle Illinois College of Medicine"},
+  {name:"Rosalind Franklin University Chicago Medical School"},
+  {name:"University of Chicago Pritzker School of Medicine"},
+  {name:"University of Illinois College of Medicine", campuses:["Chicago, IL","Peoria, IL","Rockford, IL"]},
+  {name:"Loyola University Chicago Stritch School of Medicine"},
+  {name:"Northwestern University Feinberg School of Medicine"},
+  {name:"Rush Medical College"},
+  {name:"Southern Illinois University School of Medicine"},
+  {name:"Indiana University School of Medicine", campuses:["Indianapolis, IN","Bloomington, IN","Evansville, IN","Fort Wayne, IN","Gary (Northwest), IN","Muncie, IN","South Bend, IN","Terre Haute, IN","West Lafayette, IN"]},
+  {name:"University of Iowa Carver College of Medicine"},
+  {name:"University of Kansas School of Medicine"},
+  {name:"University of Kentucky College of Medicine"},
+  {name:"University of Louisville School of Medicine"},
+  {name:"LSU Health New Orleans School of Medicine"},
+  {name:"LSU Health Shreveport School of Medicine"},
+  {name:"Tulane University School of Medicine"},
+  {name:"Johns Hopkins School of Medicine"},
+  {name:"University of Maryland School of Medicine"},
+  {name:"Uniformed Services University F. Edward Hébert School of Medicine"},
+  {name:"Boston University Chobanian & Avedisian School of Medicine"},
+  {name:"Harvard Medical School"},
+  {name:"University of Massachusetts Chan Medical School"},
+  {name:"Tufts University School of Medicine"},
+  {name:"Central Michigan University College of Medicine"},
+  {name:"University of Michigan Medical School"},
+  {name:"Michigan State University College of Human Medicine", campuses:["East Lansing, MI","Grand Rapids, MI","Flint, MI"]},
+  {name:"Oakland University William Beaumont School of Medicine"},
+  {name:"Wayne State University School of Medicine"},
+  {name:"Western Michigan University Homer Stryker M.D. School of Medicine"},
+  {name:"Mayo Clinic Alix School of Medicine"},
+  {name:"University of Minnesota Medical School"},
+  {name:"University of Missouri School of Medicine"},
+  {name:"University of Missouri–Kansas City School of Medicine"},
+  {name:"Saint Louis University School of Medicine"},
+  {name:"Washington University School of Medicine"},
+  {name:"University of Mississippi School of Medicine"},
+  {name:"Creighton University School of Medicine"},
+  {name:"University of Nebraska Medical Center College of Medicine"},
+  {name:"University of Nevada, Reno School of Medicine"},
+  {name:"University of Nevada, Las Vegas Kirk Kerkorian School of Medicine"},
+  {name:"Roseman University College of Medicine"},
+  {name:"Geisel School of Medicine at Dartmouth"},
+  {name:"Cooper Medical School of Rowan University"},
+  {name:"Hackensack Meridian School of Medicine"},
+  {name:"Rutgers New Jersey Medical School"},
+  {name:"Rutgers Robert Wood Johnson Medical School"},
+  {name:"University of New Mexico School of Medicine"},
+  {name:"Albany Medical College"},
+  {name:"University at Buffalo Jacobs School of Medicine and Biomedical Sciences"},
+  {name:"City University of New York School of Medicine"},
+  {name:"SUNY Downstate College of Medicine"},
+  {name:"Columbia University Vagelos College of Physicians and Surgeons"},
+  {name:"Weill Cornell Medical College"},
+  {name:"Albert Einstein College of Medicine"},
+  {name:"Icahn School of Medicine at Mount Sinai"},
+  {name:"New York University Grossman School of Medicine"},
+  {name:"New York University Grossman Long Island School of Medicine"},
+  {name:"New York Medical College"},
+  {name:"Stony Brook University Renaissance School of Medicine"},
+  {name:"University of Rochester School of Medicine & Dentistry"},
+  {name:"SUNY Upstate Medical University Norton College of Medicine"},
+  {name:"Zucker School of Medicine at Hofstra/Northwell"},
+  {name:"Duke University School of Medicine"},
+  {name:"East Carolina University Brody School of Medicine"},
+  {name:"University of North Carolina School of Medicine"},
+  {name:"Wake Forest School of Medicine"},
+  {name:"University of North Dakota School of Medicine and Health Sciences"},
+  {name:"Case Western Reserve University School of Medicine"},
+  {name:"University of Cincinnati College of Medicine"},
+  {name:"Northeast Ohio Medical University"},
+  {name:"Ohio State University College of Medicine"},
+  {name:"University of Toledo College of Medicine and Life Sciences"},
+  {name:"Wright State University Boonshoft School of Medicine"},
+  {name:"University of Oklahoma College of Medicine"},
+  {name:"Oregon Health & Science University School of Medicine"},
+  {name:"Drexel University College of Medicine"},
+  {name:"Geisinger Commonwealth School of Medicine"},
+  {name:"Thomas Jefferson University Sidney Kimmel Medical College"},
+  {name:"Penn State College of Medicine"},
+  {name:"University of Pennsylvania Perelman School of Medicine"},
+  {name:"University of Pittsburgh School of Medicine"},
+  {name:"Temple University Lewis Katz School of Medicine"},
+  {name:"Universidad Central del Caribe School of Medicine"},
+  {name:"Ponce Health Sciences University School of Medicine"},
+  {name:"University of Puerto Rico School of Medicine"},
+  {name:"San Juan Bautista School of Medicine"},
+  {name:"Brown University Alpert Medical School"},
+  {name:"Medical University of South Carolina"},
+  {name:"University of South Carolina School of Medicine Columbia"},
+  {name:"University of South Carolina School of Medicine Greenville"},
+  {name:"University of South Dakota Sanford School of Medicine"},
+  {name:"East Tennessee State University James H. Quillen College of Medicine"},
+  {name:"Meharry Medical College"},
+  {name:"Belmont University Thomas F. Frist, Jr. College of Medicine"},
+  {name:"University of Tennessee College of Medicine"},
+  {name:"Vanderbilt University School of Medicine"},
+  {name:"Baylor College of Medicine"},
+  {name:"University of Houston Tilman J. Fertitta Family College of Medicine"},
+  {name:"McGovern Medical School at UTHealth Houston"},
+  {name:"Texas Christian University Anne Burnett Marion School of Medicine"},
+  {name:"Texas A&M University College of Medicine"},
+  {name:"Texas Tech University Health Sciences Center School of Medicine"},
+  {name:"University of Texas at Tyler School of Medicine"},
+  {name:"Texas Tech University Health Sciences Center El Paso Paul L. Foster School of Medicine"},
+  {name:"University of Texas at Austin Dell Medical School"},
+  {name:"University of Texas Medical Branch"},
+  {name:"University of Texas Rio Grande Valley School of Medicine"},
+  {name:"UT Health San Antonio Long School of Medicine"},
+  {name:"University of Texas Southwestern Medical Center"},
+  {name:"University of Utah School of Medicine"},
+  {name:"University of Vermont Larner College of Medicine"},
+  {name:"Eastern Virginia Medical School at Old Dominion University"},
+  {name:"University of Virginia School of Medicine"},
+  {name:"Virginia Commonwealth University School of Medicine"},
+  {name:"Virginia Tech Carilion School of Medicine"},
+  {name:"University of Washington School of Medicine"},
+  {name:"Washington State University Elson S. Floyd College of Medicine"},
+  {name:"Marshall University Joan C. Edwards School of Medicine"},
+  {name:"West Virginia University School of Medicine"},
+  {name:"Medical College of Wisconsin"},
+  {name:"University of Wisconsin School of Medicine and Public Health"},
+  // ── DO (COCA) ──
+  {name:"Alabama College of Osteopathic Medicine"},
+  {name:"A.T. Still University School of Osteopathic Medicine in Arizona (Mesa)"},
+  {name:"A.T. Still University Kirksville College of Osteopathic Medicine"},
+  {name:"Midwestern University Arizona College of Osteopathic Medicine"},
+  {name:"Midwestern University Chicago College of Osteopathic Medicine"},
+  {name:"Arkansas College of Osteopathic Medicine"},
+  {name:"California Health Sciences University College of Osteopathic Medicine"},
+  {name:"Touro University California College of Osteopathic Medicine"},
+  {name:"Touro University Nevada College of Osteopathic Medicine"},
+  {name:"Touro University Montana College of Osteopathic Medicine"},
+  {name:"Touro College of Osteopathic Medicine", campuses:["New York City, NY","Middletown, NY"]},
+  {name:"Western University of Health Sciences College of Osteopathic Medicine of the Pacific", campuses:["Pomona, CA","Lebanon, OR"]},
+  {name:"Rocky Vista University College of Osteopathic Medicine", campuses:["Parker, CO","Ivins, UT","Billings, MT"]},
+  {name:"Nova Southeastern University Dr. Kiran C. Patel College of Osteopathic Medicine", campuses:["Fort Lauderdale, FL","Clearwater, FL"]},
+  {name:"Orlando College of Osteopathic Medicine"},
+  {name:"Idaho College of Osteopathic Medicine"},
+  {name:"Illinois College of Osteopathic Medicine"},
+  {name:"Marian University College of Osteopathic Medicine"},
+  {name:"Des Moines University College of Osteopathic Medicine"},
+  {name:"Kansas Health Science Center–Kansas College of Osteopathic Medicine"},
+  {name:"University of Pikeville Kentucky College of Osteopathic Medicine"},
+  {name:"University of New England College of Osteopathic Medicine"},
+  {name:"Meritus School of Osteopathic Medicine"},
+  {name:"Michigan State University College of Osteopathic Medicine", campuses:["East Lansing, MI","Clinton Township, MI","Detroit, MI"]},
+  {name:"William Carey University College of Osteopathic Medicine"},
+  {name:"Kansas City University College of Osteopathic Medicine", campuses:["Kansas City, MO","Joplin, MO"]},
+  {name:"Rowan-Virtua School of Osteopathic Medicine"},
+  {name:"Burrell College of Osteopathic Medicine", campuses:["Las Cruces, NM","Melbourne, FL"]},
+  {name:"D'Youville University College of Osteopathic Medicine"},
+  {name:"New York Institute of Technology College of Osteopathic Medicine", campuses:["Old Westbury, NY","Jonesboro, AR"]},
+  {name:"Campbell University Jerry M. Wallace School of Osteopathic Medicine"},
+  {name:"Ohio University Heritage College of Osteopathic Medicine", campuses:["Athens, OH","Dublin, OH","Cleveland, OH"]},
+  {name:"Oklahoma State University College of Osteopathic Medicine", campuses:["Tulsa, OK","Tahlequah, OK"]},
+  {name:"Lake Erie College of Osteopathic Medicine (LECOM)", campuses:["Erie, PA","Greensburg, PA","Elmira, NY","Bradenton, FL","Jacksonville, FL"]},
+  {name:"Philadelphia College of Osteopathic Medicine (PCOM)", campuses:["Philadelphia, PA","Suwanee, GA","Moultrie, GA"]},
+  {name:"Duquesne University College of Osteopathic Medicine"},
+  {name:"Edward Via College of Osteopathic Medicine (VCOM)", campuses:["Blacksburg, VA","Spartanburg, SC","Auburn, AL","Monroe, LA"]},
+  {name:"Lincoln Memorial University DeBusk College of Osteopathic Medicine", campuses:["Harrogate, TN","Knoxville, TN"]},
+  {name:"Baptist Health Sciences University College of Osteopathic Medicine"},
+  {name:"Sam Houston State University College of Osteopathic Medicine"},
+  {name:"University of the Incarnate Word School of Osteopathic Medicine"},
+  {name:"University of North Texas Health Science Center Texas College of Osteopathic Medicine"},
+  {name:"Noorda College of Osteopathic Medicine"},
+  {name:"Liberty University College of Osteopathic Medicine"},
+  {name:"Pacific Northwest University of Health Sciences College of Osteopathic Medicine"},
+  {name:"West Virginia School of Osteopathic Medicine"},
+];
+
+// One-time profile completion after first login (required, no dismiss). Also reused from
+// settings to change school later (dismissable when onClose is provided). Captures the
+// user's school — which Phase 3 keys off. Searchable picker → campus step → "Other".
+const ProfileModal = ({uid, onSaved, onClose}) => {
+  const [query, setQuery]   = useState("");
+  const [picked, setPicked] = useState(null);   // school object
+  const [campus, setCampus] = useState(null);   // chosen campus string (multi-campus schools)
+  const [other, setOther]   = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const dismissable = !!onClose;
+  const matches = query.trim()
+    ? US_MED_SCHOOLS.filter(s => s.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0,8)
+    : [];
+  const needsCampus = picked && picked.campuses && !campus;
+  const school = other ? otherText.trim()
+    : (picked ? (picked.campuses ? (campus ? `${picked.name} — ${campus}` : null) : picked.name) : null);
+  const canSave = !!school && !saving;
+  const reset = () => { setPicked(null); setCampus(null); setQuery(""); };
+  const save = async () => {
+    if(!canSave) return;
+    setSaving(true); setErr("");
+    // Update the existing row; if none yet (first-time), insert.
+    let {data, error} = await sb.from("profiles").update({school}).eq("user_id", uid).select();
+    if(!error && (!data || !data.length)){
+      ({data, error} = await sb.from("profiles").insert({user_id:uid, school}).select());
+    }
+    if(error){ console.error("profile save failed:", error); setErr(error.message || "Couldn't save — please try again."); setSaving(false); return; }
+    if(!data || !data.length){ setErr("Save didn't persist — please try again."); setSaving(false); return; }
+    onSaved(school);
+  };
+  const inputStyle = {width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"};
+  const linkStyle = {marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0};
+  return (
+    <Modal title={dismissable?"Change your school":"Welcome to Marro"} onClose={onClose||(()=>{})} width={420}>
+      <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.5}}>
+        {dismissable ? "Pick your medical school below." : "One quick thing — which medical school do you attend? This personalizes Marro for your program."}
+      </div>
+      {other ? <>
+        <input autoFocus value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Type your school's full name" style={inputStyle}/>
+        <button onClick={()=>{setOther(false);setOtherText("");}} style={linkStyle}>← Back to the list</button>
+      </> : needsCampus ? <>
+        <div style={{fontSize:12.5,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
+        <div style={{fontSize:12,color:C.gray,marginBottom:8}}>Which campus?</div>
+        <div role="listbox" style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+          {picked.campuses.map(c=>(
+            <button key={c} role="option" className="menu-row" onClick={()=>setCampus(c)}
+              style={{display:"block",width:"100%",textAlign:"left",padding:"9px 12px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>{c}</button>
+          ))}
+        </div>
+        <button onClick={reset} style={linkStyle}>← Choose a different school</button>
+      </> : picked ? <>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 12px",borderRadius:10,border:`1px solid ${C.sel}`,background:C.selBg}}>
+          <span style={{fontSize:13,color:C.text,fontWeight:600}}>{campus ? `${picked.name} — ${campus}` : picked.name}</span>
+          <button onClick={reset} style={{border:"none",background:"transparent",color:C.gray,cursor:"pointer",fontSize:12}}>Change</button>
+        </div>
+      </> : <>
+        <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search your school…" style={inputStyle}/>
+        {matches.length>0 && (
+          <div role="listbox" style={{marginTop:6,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",maxHeight:264,overflowY:"auto"}}>
+            {matches.map(s=>(
+              <button key={s.name} role="option" className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}}
+                style={{display:"block",width:"100%",textAlign:"left",padding:"9px 12px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>{s.name}{s.campuses?" ›":""}</button>
+            ))}
+          </div>
+        )}
+        <button onClick={()=>{reset();setOther(true);}} style={linkStyle}>My school isn't listed →</button>
+      </>}
+      {err && <div style={{marginTop:12,fontSize:12,color:C.neg}}>{err}</div>}
+      <button onClick={save} disabled={!canSave}
+        style={{marginTop:err?10:20,width:"100%",padding:"11px 16px",borderRadius:10,border:"none",background:canSave?C.teal:C.border,color:canSave?"#fff":C.gray,fontSize:14,fontWeight:600,cursor:canSave?"pointer":"not-allowed",transition:"all .15s"}}>
+        {saving?"Saving…":"Save"}
+      </button>
+      {dismissable && <button onClick={onClose} style={{...linkStyle,color:C.gray,display:"block",width:"100%",textAlign:"center",marginTop:10}}>Cancel</button>}
+    </Modal>
+  );
+};
+
 const Divider = () => <div style={{height:1,background:C.border,margin:"10px 0"}}/>;
 
 const MetricTile = ({label, value, sub, color, onClick}) => (
@@ -1551,6 +1866,9 @@ function App() {
   const [dismissed, setDismissed] = useState({});
   const [syncStatus, setSyncStatus] = useState(null); // null|"syncing"|"synced"|"offline"|"conflict"
   const [pendingConflict, setPendingConflict] = useState(null);
+  const [session, setSession] = useState(undefined); // undefined=restoring, null=logged out, obj=logged in
+  const [profile, setProfile] = useState(null);      // {school} | null (no row yet → ProfileModal)
+  const [editSchool, setEditSchool] = useState(false); // settings → reopen ProfileModal to change school
   const gistTimerRef = React.useRef(null);
   const dataRef = React.useRef(null);
   const lastFocusRef = React.useRef(0);
@@ -1622,22 +1940,59 @@ function App() {
   const [compareA,           setCompareA]           = useState(null); // {type:"month"|"year", ay, mi}
   const [compareB,           setCompareB]           = useState(null);
 
-  // Load
+  // Auth: restore session on boot + listen for sign-in/out across tabs.
   useEffect(()=>{
+    sb.auth.getSession().then(({data})=>setSession(data.session ?? null));
+    const {data:{subscription}} = sb.auth.onAuthStateChange((evt, s)=>{
+      setSession(s ?? null);
+      if(evt==="SIGNED_OUT"){
+        localStorage.removeItem("wcm_v8");
+        localStorage.removeItem(SYNC_BASE_KEY);
+        localStorage.removeItem("wcm_uid");
+        setData(null); setProfile(null); setReady(false); setSyncStatus(null);
+      }
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  // Load — gated on auth. Runs once a session is known; bails while restoring or
+  // when signed out (LoginScreen handles that via the render gate).
+  useEffect(()=>{
+    if(session===undefined) return;   // still restoring
+    if(!session){ return; }           // signed out → LoginScreen
     (async()=>{
       try{
+        const uid = session.user.id;
+        // Shared-device guard: if a different user's data is cached locally, drop it
+        // before loading so the migration rule can't upload user A's data to user B.
+        const storedUid = localStorage.getItem("wcm_uid");
+        if(storedUid && storedUid !== uid){
+          localStorage.removeItem("wcm_v8");
+          localStorage.removeItem(SYNC_BASE_KEY);
+        }
+        localStorage.setItem("wcm_uid", uid);
+
         let raw = null;
-        // Try Gist first (primary source of truth across devices)
+        // Supabase is the source of truth across devices.
         setSyncStatus("syncing");
-        const gistContent = await gistFetch();
-        if(gistContent){
-          raw = gistContent;
+        const serverContent = await stateFetch();
+        if(serverContent){
+          raw = serverContent;
           // Store as the agreed-upon base for 3-way merge
           localStorage.setItem(SYNC_BASE_KEY, raw);
           await window.storage.set("wcm_v8", raw);
           setSyncStatus("synced");
+        } else if(navigator.onLine){
+          // No server row yet → first login. Migrate any local state up (or seed defaults).
+          let r = await window.storage.get("wcm_v8");
+          if(!r?.value) r = await window.storage.get("wcm_v7");
+          raw = r?.value || JSON.stringify(DEFAULT_STATE);
+          const ok = await stateWrite(raw);
+          localStorage.setItem(SYNC_BASE_KEY, raw);
+          await window.storage.set("wcm_v8", raw);
+          setSyncStatus(ok ? "synced" : "offline");
         } else {
-          // Fall back to localStorage
+          // Offline with a cached session → load local cache, sync on reconnect.
           let r = await window.storage.get("wcm_v8");
           if(!r?.value) r = await window.storage.get("wcm_v7");
           raw = r?.value || null;
@@ -1667,11 +2022,18 @@ function App() {
           }
         });
         setData(loaded);
+        // Profile (school). No row → {school:null} triggers the one-time ProfileModal.
+        // On error (e.g. offline) leave profile null so we don't block — re-check next boot.
+        try{
+          const {data:prof, error} = await sb.from("profiles").select("school").maybeSingle();
+          if(!error) setProfile(prof || {school:null});
+        }catch{}
       }
       catch(e){console.error(e);setData(JSON.parse(JSON.stringify(DEFAULT_STATE)));setSyncStatus("offline");}
       setReady(true);
     })();
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[session]);
 
   // Theme follows data.darkMode from every path (toggle, sync pull, conflict resolution).
   // applyTheme mutates C outside React, so tick a render afterwards — the render that
@@ -1715,7 +2077,7 @@ function App() {
       const baseRaw = localStorage.getItem(SYNC_BASE_KEY);
       const base = baseRaw ? JSON.parse(baseRaw) : null;
       if(base){
-        const serverContent = await gistFetch();
+        const serverContent = await stateFetch();
         if(serverContent){
           const server = JSON.parse(serverContent);
           if(server._savedAt && base._savedAt && server._savedAt > base._savedAt){
@@ -1731,14 +2093,14 @@ function App() {
             // No conflicts — auto-merge: start from server, apply local-only changes
             let merged=applyChanges(serverClean,mergeLocal);
             const mergedJson=JSON.stringify({...merged,_savedAt:Date.now()});
-            const ok=await gistWrite(mergedJson);
+            const ok=await stateWrite(mergedJson);
             if(ok){localStorage.setItem(SYNC_BASE_KEY,mergedJson);await window.storage.set("wcm_v8",mergedJson);setData(merged);setSyncStatus("synced");}
             else setSyncStatus("offline");
             return;
           }
         }
       }
-      const ok=await gistWrite(json);
+      const ok=await stateWrite(json);
       if(ok){localStorage.setItem(SYNC_BASE_KEY,json);setSyncStatus("synced");}
       else setSyncStatus("offline");
     }, 2000);
@@ -1749,7 +2111,7 @@ function App() {
     let merged=applyChanges(server,mergeLocal);
     merged=applyChanges(merged,resolvedChanges);
     const mergedJson=JSON.stringify({...merged,_savedAt:Date.now()});
-    const ok=await gistWrite(mergedJson);
+    const ok=await stateWrite(mergedJson);
     if(ok){localStorage.setItem(SYNC_BASE_KEY,mergedJson);await window.storage.set("wcm_v8",mergedJson);setData(merged);setSyncStatus("synced");}
     else setSyncStatus("offline");
     setPendingConflict(null);
@@ -1763,7 +2125,7 @@ function App() {
     const baseRaw=localStorage.getItem(SYNC_BASE_KEY);
     const base=baseRaw?JSON.parse(baseRaw):null;
     if(!base) return;
-    const serverContent=await gistFetch();
+    const serverContent=await stateFetch();
     if(!serverContent) return;
     const server=JSON.parse(serverContent);
     if(!server._savedAt||!base._savedAt||server._savedAt<=base._savedAt) return;
@@ -1826,6 +2188,8 @@ function App() {
   },[ready]);
 
 
+  if(session===undefined) return <div style={{padding:40,color:C.gray,fontSize:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Loading…</div>;
+  if(session===null) return <LoginScreen offline={!navigator.onLine}/>;
   if(!ready) return <div style={{padding:40,color:C.gray,fontSize:14,fontFamily:"'Inter',system-ui,sans-serif"}}>Loading…</div>;
 
   const yr   = data.years.find(y=>y.id===ay)||data.years[0];
@@ -2627,6 +2991,16 @@ function App() {
                   <Icon name="subs" size={14}/>
                   Reset defaults
                 </button>
+                <div style={{height:1,background:C.border,margin:"6px 4px"}}/>
+                <div style={{padding:"6px 10px 0",fontSize:10.5,color:C.gray,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={session?.user?.email}>{session?.user?.email}</div>
+                {profile?.school && <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);setEditSchool(true);}} title={profile.school} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",padding:"0 10px 4px",border:"none",background:"transparent",cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:10.5,color:C.gray,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{profile.school}</span>
+                  <span style={{fontSize:10.5,color:C.teal,flexShrink:0}}>Change</span>
+                </button>}
+                <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);sb.auth.signOut();}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.textMid,fontSize:12,fontWeight:500,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
+                  <Icon name="live" size={14}/>
+                  Sign out
+                </button>
               </div>
             </>}
           </div>
@@ -2643,6 +3017,8 @@ function App() {
       {/* ── Conflict modal ── */}
       <BlobHealth over={moSurplus<0} bloom={bloom}/>
       {pendingConflict && <ConflictModal pending={pendingConflict} data={data} onResolve={resolveConflict}/>}
+      {profile && !profile.school && <ProfileModal uid={session.user.id} onSaved={s=>setProfile({school:s})}/>}
+      {editSchool && <ProfileModal uid={session.user.id} onSaved={s=>{setProfile({school:s});setEditSchool(false);}} onClose={()=>setEditSchool(false)}/>}
 
       {/* ── Renewal alerts ── */}
       {renewalsDue.map(s=>(

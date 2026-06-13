@@ -21,8 +21,12 @@ Projected graduation balance, recommendations, comparison mode, Step 3 goal + mi
 - ✓ Step 11 — Blob health states (calm/low-tide/marigold bloom), docs rewritten
 - Deferred from this phase → FUTURE_WORK: tab-pill redesign + cross-fades, chart gradient/draw-on animations, number-roll, apple-touch-icon PNG
 
-## Phase 2.5b — Auth + Supabase (NEXT after 2.5)
-Google login via Supabase Auth; Supabase DB replaces localStorage + Gist sync; per-user isolated data; school as required signup field (feeds Phase 3); clean migration of existing WCM data on first login. Required before onboarding any non-WCM testers.
+## Phase 2.5b — Auth + Supabase ✓ COMPLETE (June 13, 2026)
+- ✓ Google login via Supabase Auth; hard login gate (no anonymous mode), LoginScreen
+- ✓ Supabase `app_state` table (one jsonb blob/user, RLS) replaces Gist as the sync transport; localStorage kept as offline cache + merge ancestor; 3-way merge engine reused unchanged (gistFetch/gistWrite → stateFetch/stateWrite); `api/sync.js` deleted
+- ✓ First-login migration: uploads local state to Supabase if server row empty; `wcm_uid` shared-device guard
+- ✓ `profiles` table + one-time ProfileModal: searchable picker over full Wikipedia-sourced US MD (LCME) + DO (COCA) lists (`US_MED_SCHOOLS`); multi-campus schools (LECOM, VCOM, PCOM, RVU, Indiana, Illinois, MSU, etc.) prompt a campus step, stored as "Name — Campus"; free-text Other; school shown in settings with a "Change" action that reopens the picker (editable/cancelable)
+- Deferred to pre-public-launch (see FUTURE_WORK): custom auth domain + Google verification (consent screen currently shows raw Supabase domain + unverified warning; Testing mode capped at 100 users); remove unused `GIST_TOKEN` Vercel env var after a prod deploy.
 
 ## Phase 3 — School-agnostic generalization
 First-run onboarding wizard, user-defined year configs, remove WCM hardcoding, variable program lengths. Required before any non-WCM users.

@@ -81,27 +81,35 @@ Shows when `yr.monthly.exams > 0` AND any Step goal has `saved < targetAmount &&
 
 ---
 
-## Sync architecture (CRITICAL — read before touching sync)
+## Auth + Sync architecture (CRITICAL — read before touching sync)
 
-### Storage keys
+### Auth (Phase 2.5b)
+- supabase-js v2 UMD via CDN; client `const sb` (the UMD global is `supabase` — don't shadow it). URL + **publishable** key hardcoded in `index.html` (safe; RLS-gated). PKCE flow.
+- Hard login gate. `session` state: `undefined`=restoring → Loading; `null`=signed out → `LoginScreen`; object → app. `getSession()` on boot + `onAuthStateChange`; `SIGNED_OUT` clears `wcm_v8`/`wcm_v8_base`/`wcm_uid`.
+- `applyTheme(dataset!=="light")` runs at module load so pre-login screens (LoginScreen) theme correctly before app data loads.
+
+### Supabase tables (RLS: each user reads/writes only their own row, `auth.uid() = user_id`)
+- `app_state(user_id uuid PK, state jsonb, updated_at)` — the whole state blob, one row/user.
+- `profiles(user_id uuid PK, school text, created_at)` — null/empty school → one-time `ProfileModal`. Picker searches `US_MED_SCHOOLS` (full Wikipedia MD+DO list; entries are `{name}` or `{name, campuses:[...]}`); multi-campus schools add a campus step, stored as `"Name — Campus"`; free-text Other. Settings "Change" reopens it (dismissable). Save uses explicit `update().eq("user_id").select()` then `insert` if no row (upsert was a silent no-op).
+
+### Storage keys (localStorage = offline cache + merge ancestor; Supabase = source of truth)
 | Key | Purpose |
 |---|---|
-| `wcm_v8` | Current local state |
+| `wcm_v8` | Current local state (cache) |
 | `wcm_v8_base` | Last synced state (3-way-merge ancestor) |
-| `wcm_gist_id` | Cached Gist ID |
+| `wcm_uid` | Last signed-in user id (shared-device guard: clears cache if a different user signs in) |
 
 ### Flow
-- Every save stamps `_savedAt`. On load, a successful Gist fetch becomes both `wcm_v8` and `wcm_v8_base`.
-- On save (debounced 2s): fetch server, compare `_savedAt` vs base —
-  server not newer → write; newer without overlap → silent auto-merge; same field changed both sides → **ConflictModal**.
+- Every save stamps `_savedAt` (the merge clock, inside the blob). Load (gated on `session`): `stateFetch()` → server row becomes `wcm_v8` + `wcm_v8_base`. No row + online → **first-login migration**: upload local `wcm_v8`/`wcm_v7` (or DEFAULT_STATE) via `stateWrite`. Offline → local cache, `syncStatus:"offline"`.
+- On save (debounced 2s): fetch server, compare `_savedAt` vs base — server not newer → write; newer without overlap → silent auto-merge; same field changed both sides → **ConflictModal**.
 - `window online` → immediate save. `visibilitychange` + every 30s visible → `checkAndPull`.
 
-### Merge engine (utility fns before App)
+### Merge engine (utility fns before App — transport-agnostic, reused unchanged from the Gist era)
 `diffStates(base, cur)` → changed-key map `{b,c}` · `findConflicts(localCh, serverCh)` · `applyChanges(state, changes)` · `conflictLabel` / `fmtConflictVal` for display.
 
-### Server side
-- `/api/sync.js` (Vercel serverless) proxies the Gist API using the `GIST_TOKEN` env var — credentials never appear in `index.html`.
-- Gist discovery: `GET /api/sync` without `id` scans for `wcm_budget_v1.json`; frontend clears a failed cached ID and re-discovers.
+### Transport (`stateFetch` / `stateWrite`, before App)
+- `stateFetch()` → `sb.from("app_state").select("state").maybeSingle()` → JSON string | null (null = no row or error/offline).
+- `stateWrite(json)` → upsert `{user_id, state}` → boolean. Same string-in/string-out contract the old `gistFetch`/`gistWrite` had, so `save`/`checkAndPull`/`resolveConflict` only needed a name swap. (Old `api/sync.js` Gist proxy deleted.)
 
 ### Service worker (`sw.js`)
-Cache `wcm-budget-v6`. Never caches `index.html` (navigations always network). Caches only `/manifest.json` + `/icon.svg`. Registration: `updateViaCache:'none'`, `reg.update()` on load, auto-reload on `controllerchange`.
+Cache `wcm-budget-v8`. Never caches `index.html` (navigations always network) — OAuth redirects safe. Caches `/manifest.json`, `/icon.svg`, fonts; network-first/cache-fallback otherwise (covers the supabase-js CDN script for offline). Registration: `updateViaCache:'none'`, `reg.update()` on load, auto-reload on `controllerchange`.
