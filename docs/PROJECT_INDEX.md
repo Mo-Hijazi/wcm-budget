@@ -16,6 +16,7 @@ Don't scan the file; `grep -n` the key for the section you need. Keys are stable
 | CSS (glass, tabbar fade, focus, date-field theming) | `<style>` (first hit) |
 | Supabase client + transport (auth/data) | `const sb` / `const stateFetch` |
 | Login gate / school picker (auth UI) | `const LoginScreen` / `const ProfileModal` / `US_MED_SCHOOLS` |
+| First-run onboarding + identity (name/avatar/school) | `const OnboardingFlow` / `const Avatar` / `const RingMonogram` / `const BloomRings` |
 | Auth session state + boot effect | `const [session` / `onAuthStateChange` |
 | Sync merge engine (diff/conflict/apply utils) | `function diffStates` |
 | Color tokens + chart palette | `const C = ` then `CHART_COLORS` |

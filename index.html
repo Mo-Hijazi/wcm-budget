@@ -339,6 +339,40 @@
       box-shadow: var(--shadow-modal);
     }
   }
+  /* ── Onboarding choreography ── */
+  @keyframes obStepIn {
+    from { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(2px); }
+    to   { opacity: 1; transform: none; filter: blur(0); }
+  }
+  @keyframes obRise {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes obRingDraw {
+    0%   { stroke-dashoffset: var(--circ); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 1; }
+  }
+  @keyframes obCorePop {
+    0%   { transform: scale(0); opacity: 0; }
+    60%  { transform: scale(1.4); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes obOrbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes obSheen {
+    0%   { transform: translateX(-120%); }
+    60%,100% { transform: translateX(120%); }
+  }
+  .ob-step { animation: obStepIn 480ms cubic-bezier(0.23,1,0.32,1) both; }
+  .ob-rise { animation: obRise 560ms cubic-bezier(0.23,1,0.32,1) both; }
+  .ob-orbit { transform-box: fill-box; transform-origin: center; animation: obOrbit 8s linear infinite; }
+  .ob-dot-pop { transform-box: fill-box; transform-origin: center; animation: obCorePop 700ms cubic-bezier(0.23,1,0.32,1) both; }
+  .ob-swatch { transition: transform 160ms cubic-bezier(0.23,1,0.32,1), box-shadow 160ms ease; }
+  @media (hover: hover) and (pointer: fine) {
+    .ob-swatch:hover { transform: translateY(-3px) scale(1.04); }
+    .ob-cta:hover { transform: translateY(-1px); }
+  }
+  .ob-cta { transition: transform 140ms cubic-bezier(0.23,1,0.32,1), background 140ms ease, opacity 140ms ease; }
   /* Respect user motion preferences (Emil Kowalski) */
   @media (prefers-reduced-motion: reduce) {
     .mc { transition: none; }
@@ -346,6 +380,8 @@
     .mc-sh { display: none; }
     .blob { animation: none !important; }
     [style*="iconSwap"] { animation: none !important; }
+    .ob-step, .ob-rise, .ob-orbit, .ob-dot-pop { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+    [class*="obRingDraw"], [style*="obRingDraw"] { animation: none !important; stroke-dashoffset: 0 !important; opacity: 1 !important; }
   }
 </style>
 </head>
@@ -916,6 +952,7 @@ const DEFAULT_STATE = {
   logo: null,  // legacy field (kept for sync compatibility)
   monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
   preferredName: null,
+  avatar: null,  // {type:"google",url} | {type:"monogram",color:"<token key>"} | null
   darkMode: false,
   stepGoals: [
     { id:"step1", label:"Step 1", targetAmount:850, targetDate:"2028-06-01", saved:0, monthlyContribution:50 },
@@ -1651,6 +1688,227 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
       </button>
       {dismissable && <button onClick={onClose} style={{...linkStyle,color:C.gray,display:"block",width:"100%",textAlign:"center",marginTop:10}}>Cancel</button>}
     </Modal>
+  );
+};
+
+// ── Identity bits ────────────────────────────────────────────────────────────
+// The monogram avatar wears the Marro ring motif: faint concentric rings behind a
+// serif initial in the chosen accent. Themed via C tokens so it follows light/dark.
+const AVATAR_COLORS = ["marigold","teal","danger","blue","neg"];
+const RingMonogram = ({initial, color="marigold", size=56}) => {
+  const accent = C[color] || C.marigold;
+  const r = Math.max(8, Math.round(size*0.24));
+  return (
+    <div style={{width:size,height:size,borderRadius:r,background:"#14150F",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",flexShrink:0,boxShadow:`0 0 0 1.5px rgba(246,239,221,0.14), 0 4px 18px rgba(0,0,0,0.42)`}}>
+      <svg width={size} height={size} viewBox="0 0 56 56" style={{position:"absolute",inset:0}} aria-hidden="true">
+        <g transform="translate(28,28)" fill="none" stroke={accent}>
+          <circle r="13" strokeWidth="1.2" opacity="0.50"/>
+          <circle r="20" strokeWidth="1.2" opacity="0.26"/>
+          <circle r="27" strokeWidth="1.2" opacity="0.13"/>
+        </g>
+      </svg>
+      <span style={{position:"relative",fontFamily:"'Newsreader',Georgia,serif",fontWeight:600,fontSize:Math.round(size*0.44),color:accent,lineHeight:1,letterSpacing:"-0.02em"}}>{(initial||"?").toUpperCase()}</span>
+    </div>
+  );
+};
+
+// Renders the user's chosen avatar anywhere (header, settings). Falls back to a
+// plain initial chip for users who onboarded before avatars existed.
+const Avatar = ({avatar, name, email, size=28}) => {
+  const initial = (name||email||"?").slice(0,1).toUpperCase();
+  if(avatar && avatar.type==="google" && avatar.url)
+    return <img src={avatar.url} alt="" width={size} height={size} referrerPolicy="no-referrer" style={{borderRadius:"50%",objectFit:"cover",flexShrink:0,display:"block"}}/>;
+  if(avatar && avatar.type==="monogram")
+    return <RingMonogram initial={initial} color={avatar.color} size={size}/>;
+  return <div style={{width:size,height:size,borderRadius:"50%",background:C.selBg,border:`1px solid ${C.sel}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.round(size*0.42),fontWeight:700,color:C.text,flexShrink:0}}>{initial}</div>;
+};
+
+// Growth-rings that draw themselves in — the welcome/finish flourish.
+const BloomRings = ({size=108}) => {
+  const rings=[{r:11,d:200},{r:18,d:90},{r:25,d:0}];
+  return (
+    <div style={{width:size,height:size,position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <svg width={size} height={size} viewBox="0 0 56 56" style={{position:"absolute",inset:0}} aria-hidden="true">
+        <g transform="translate(28,28)">
+          {rings.map((ring,i)=>{const circ=2*Math.PI*ring.r;return(
+            <circle key={i} r={ring.r} fill="none" stroke={C.text} strokeWidth="1.4" strokeLinecap="round" opacity={0.9-i*0.16}
+              style={{"--circ":circ, strokeDasharray:circ, animation:`obRingDraw 900ms cubic-bezier(0.23,1,0.32,1) ${ring.d}ms both`}}/>
+          );})}
+          <circle r="2.1" fill={C.marigold} className="ob-dot-pop" style={{animationDelay:"480ms"}}/>
+        </g>
+      </svg>
+      <svg width={size} height={size} viewBox="0 0 56 56" className="ob-orbit" style={{position:"absolute",inset:0,opacity:0.9}} aria-hidden="true">
+        <circle cx="28" cy="9.5" r="1.5" fill={C.marigold}/>
+      </svg>
+    </div>
+  );
+};
+
+// First-run welcome — a guided, branded setup: name → avatar → school. Replaces the
+// bare school-only ProfileModal for new users. Saves name+avatar into app state (data)
+// and school into the profiles table, then hands control back via onDone(school).
+const OnboardingFlow = ({uid, user, data, upd, onDone}) => {
+  const meta = user?.user_metadata || {};
+  const googlePhoto = meta.avatar_url || meta.picture || null;
+  const googleFirst = (meta.full_name || meta.name || meta.given_name || "").trim().split(/\s+/)[0] || "";
+  const [step, setStep] = useState(0); // 0 welcome,1 name,2 avatar,3 school,4 finishing
+  const [name, setName] = useState(googleFirst);
+  const [avatar, setAvatar] = useState(googlePhoto ? {type:"google",url:googlePhoto} : {type:"monogram",color:"marigold"});
+  // school picker state (mirrors ProfileModal)
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState(null);
+  const [campus, setCampus] = useState(null);
+  const [other, setOther] = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const matches = query.trim() ? US_MED_SCHOOLS.filter(s=>s.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0,8) : [];
+  const needsCampus = picked && picked.campuses && !campus;
+  const school = other ? otherText.trim() : (picked ? (picked.campuses ? (campus ? `${picked.name} — ${campus}` : null) : picked.name) : null);
+  const resetSchool = () => { setPicked(null); setCampus(null); setQuery(""); };
+  const initial = (name || user?.email || "?").slice(0,1).toUpperCase();
+
+  const finish = async () => {
+    if(!school || saving) return;
+    setSaving(true); setErr("");
+    let {data:pd, error} = await sb.from("profiles").update({school}).eq("user_id", uid).select();
+    if(!error && (!pd || !pd.length)) ({data:pd, error} = await sb.from("profiles").insert({user_id:uid, school}).select());
+    if(error || !pd || !pd.length){ setErr(error?.message || "Couldn't save — please try again."); setSaving(false); return; }
+    // Persist name + avatar into app state
+    const d = JSON.parse(JSON.stringify(data));
+    d.preferredName = name.trim() || null;
+    d.avatar = avatar;
+    upd(d);
+    setStep(4);
+    setTimeout(()=>onDone(school), 1500);
+  };
+
+  const cta = {width:"100%",padding:"13px 16px",borderRadius:12,border:"none",fontSize:14.5,fontWeight:600,cursor:"pointer",letterSpacing:"-0.01em"};
+  const ctaPrimary = on => ({...cta,background:on?C.text:C.border,color:on?C.bg:C.gray,cursor:on?"pointer":"not-allowed"});
+  const input = {width:"100%",padding:"13px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"};
+  const head = {fontFamily:"'Newsreader',Georgia,serif",fontSize:25,fontWeight:600,color:C.text,letterSpacing:"-0.02em",lineHeight:1.15};
+  const sub  = {fontSize:13,color:C.gray,marginTop:8,lineHeight:1.55};
+  const dotsTotal = 3; // name, avatar, school
+  const dotIdx = step-1; // welcome(0) shows none
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Welcome to Marro" style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:C.scrim,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)"}}>
+      <div className="mm" style={{position:"relative",width:"100%",maxWidth:420,padding:"36px 30px 30px",overflow:"hidden"}}>
+        {/* progress dots */}
+        {step>=1 && step<=3 && (
+          <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:26}}>
+            {Array.from({length:dotsTotal}).map((_,i)=>(
+              <div key={i} style={{height:5,borderRadius:5,transition:"all .3s cubic-bezier(0.23,1,0.32,1)",width:i===dotIdx?22:5,background:i<=dotIdx?C.marigold:C.border}}/>
+            ))}
+          </div>
+        )}
+
+        <div key={step} className="ob-step">
+          {step===0 && (
+            <div style={{textAlign:"center"}}>
+              <div style={{display:"flex",justifyContent:"center",marginBottom:22}}><BloomRings size={112}/></div>
+              <div style={{...head,fontSize:30}} className="ob-rise" >Welcome to Marro<span style={{color:C.marigold}}>.</span></div>
+              <div style={{...sub,maxWidth:300,margin:"10px auto 0"}} className="ob-rise">A calmer way to handle money through medical school. Let's make it yours — it takes about thirty seconds.</div>
+              <button className="ob-cta ob-rise" style={{...ctaPrimary(true),marginTop:28}} onClick={()=>setStep(1)}>Get started</button>
+            </div>
+          )}
+
+          {step===1 && (
+            <div>
+              <div style={head}>What should we call you?</div>
+              <div style={sub}>We'll greet you by this name. It's just for you — change it anytime.</div>
+              <input autoFocus value={name} onChange={e=>setName(e.target.value)} maxLength={40}
+                onKeyDown={e=>{if(e.key==="Enter"&&name.trim())setStep(2);}}
+                placeholder="Your first name" style={{...input,marginTop:22}}/>
+              <button className="ob-cta" style={{...ctaPrimary(!!name.trim()),marginTop:18}} disabled={!name.trim()} onClick={()=>setStep(2)}>Continue</button>
+              <button onClick={()=>setStep(0)} style={{display:"block",margin:"12px auto 0",border:"none",background:"transparent",color:C.gray,fontSize:12.5,cursor:"pointer"}}>← Back</button>
+            </div>
+          )}
+
+          {step===2 && (
+            <div style={{textAlign:"center"}}>
+              <div style={{...head,textAlign:"left"}}>Make it yours.</div>
+              <div style={{...sub,textAlign:"left"}}>Pick a look. {googlePhoto?"Use your Google photo, or":"Choose"} a Marro monogram.</div>
+              {/* live preview */}
+              <div style={{display:"flex",justifyContent:"center",margin:"24px 0 22px"}}>
+                <div style={{position:"relative"}}>
+                  <Avatar avatar={avatar} name={name} email={user?.email} size={92}/>
+                </div>
+              </div>
+              {/* options */}
+              <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+                {googlePhoto && (
+                  <button className="ob-swatch" onClick={()=>setAvatar({type:"google",url:googlePhoto})}
+                    aria-label="Use Google photo" style={{padding:0,border:`2px solid ${avatar.type==="google"?C.marigold:"transparent"}`,borderRadius:"50%",background:"transparent",cursor:"pointer",lineHeight:0}}>
+                    <img src={googlePhoto} alt="" width={46} height={46} referrerPolicy="no-referrer" style={{borderRadius:"50%",objectFit:"cover",display:"block"}}/>
+                  </button>
+                )}
+                {AVATAR_COLORS.map(col=>{
+                  const sel = avatar.type==="monogram" && avatar.color===col;
+                  return (
+                    <button key={col} className="ob-swatch" onClick={()=>setAvatar({type:"monogram",color:col})}
+                      aria-label={`Monogram ${col}`} style={{padding:0,border:`2px solid ${sel?C.marigold:"transparent"}`,borderRadius:14,background:"transparent",cursor:"pointer",lineHeight:0}}>
+                      <RingMonogram initial={initial} color={col} size={46}/>
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="ob-cta" style={{...ctaPrimary(true),marginTop:28}} onClick={()=>setStep(3)}>Continue</button>
+              <button onClick={()=>setStep(1)} style={{display:"block",margin:"12px auto 0",border:"none",background:"transparent",color:C.gray,fontSize:12.5,cursor:"pointer"}}>← Back</button>
+            </div>
+          )}
+
+          {step===3 && (
+            <div>
+              <div style={head}>Where are you training?</div>
+              <div style={sub}>This tailors Marro to your program. We never share it.</div>
+              <div style={{marginTop:20}}>
+                {other ? <>
+                  <input autoFocus value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Type your school's full name" style={input}/>
+                  <button onClick={()=>{setOther(false);setOtherText("");}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Back to the list</button>
+                </> : needsCampus ? <>
+                  <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
+                  <div style={{fontSize:12,color:C.gray,marginBottom:8}}>Which campus?</div>
+                  <div role="listbox" style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
+                    {picked.campuses.map(c=>(
+                      <button key={c} role="option" className="menu-row" onClick={()=>setCampus(c)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{c}</button>
+                    ))}
+                  </div>
+                  <button onClick={resetSchool} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Choose a different school</button>
+                </> : picked ? <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.sel}`,background:C.selBg}}>
+                    <span style={{fontSize:13.5,color:C.text,fontWeight:600}}>{campus?`${picked.name} — ${campus}`:picked.name}</span>
+                    <button onClick={resetSchool} style={{border:"none",background:"transparent",color:C.gray,cursor:"pointer",fontSize:12}}>Change</button>
+                  </div>
+                </> : <>
+                  <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search your school…" style={input}/>
+                  {matches.length>0 && (
+                    <div role="listbox" style={{marginTop:8,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
+                      {matches.map(s=>(
+                        <button key={s.name} role="option" className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{s.name}{s.campuses?" ›":""}</button>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={()=>{resetSchool();setOther(true);}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>My school isn't listed →</button>
+                </>}
+              </div>
+              {err && <div role="alert" style={{marginTop:12,fontSize:12,color:C.danger}}>{err}</div>}
+              <button className="ob-cta" style={{...ctaPrimary(!!school && !saving),marginTop:err?12:20}} disabled={!school||saving} onClick={finish}>{saving?"Setting up…":"Finish"}</button>
+              <button onClick={()=>setStep(2)} style={{display:"block",margin:"12px auto 0",border:"none",background:"transparent",color:C.gray,fontSize:12.5,cursor:"pointer"}}>← Back</button>
+            </div>
+          )}
+
+          {step===4 && (
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <div style={{display:"flex",justifyContent:"center",marginBottom:22}}><BloomRings size={112}/></div>
+              <div style={{...head,fontSize:27}} className="ob-rise">You're all set{name.trim()?`, ${name.trim()}`:""}<span style={{color:C.marigold}}>.</span></div>
+              <div style={{...sub,maxWidth:280,margin:"10px auto 0"}} className="ob-rise">Opening your dashboard…</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -2983,14 +3241,13 @@ function App() {
         // Changes daily, stable within a session
         const dayIdx=Math.floor(Date.now()/86400000)%pool.length;
         const greeting=pool[dayIdx];
-        const initials=(data.preferredName||session?.user?.email||"?").slice(0,1).toUpperCase();
         return (
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",columnGap:12,rowGap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:12,flex:"1 1 230px",minWidth:0}}>
             <MarroLogo/>
             <div>
               <div style={{fontSize:24,fontWeight:600,color:C.text,letterSpacing:"-0.02em",lineHeight:1.1,fontFamily:"'Newsreader', Georgia, serif"}}>Marro<span style={{color:C.marigold}}>.</span></div>
-              <div style={{fontSize:11,color:C.gray,marginTop:2}}>{greeting}</div>
+              <div key={greeting} style={{fontSize:13.5,color:C.textMid,marginTop:3,fontFamily:"'Newsreader', Georgia, serif",fontStyle:"italic",letterSpacing:"-0.01em",lineHeight:1.2,animation:"obRise 600ms cubic-bezier(0.23,1,0.32,1) both"}}>{greeting}</div>
             </div>
           </div>
           <div style={{display:"flex",gap:10,alignItems:"center"}}>
@@ -3010,7 +3267,7 @@ function App() {
                   {/* Profile block */}
                   <div style={{padding:"8px 10px 10px",borderBottom:`1px solid ${C.border}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                      <div style={{width:28,height:28,borderRadius:"50%",background:C.selBg,border:`1px solid ${C.sel}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{initials}</div>
+                      <Avatar avatar={data.avatar} name={data.preferredName} email={session?.user?.email} size={30}/>
                       <div style={{minWidth:0}}>
                         {editName ? (
                           <form onSubmit={e=>{e.preventDefault();const val=e.target.elements.n.value.trim();const d=JSON.parse(JSON.stringify(data));d.preferredName=val||null;upd(d);setEditName(false);}} style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -3076,7 +3333,7 @@ function App() {
       {/* ── Conflict modal ── */}
       <BlobHealth over={moSurplus<0} bloom={bloom}/>
       {pendingConflict && <ConflictModal pending={pendingConflict} data={data} onResolve={resolveConflict}/>}
-      {profile && !profile.school && <ProfileModal uid={session.user.id} onSaved={s=>setProfile({school:s})}/>}
+      {profile && !profile.school && <OnboardingFlow uid={session.user.id} user={session.user} data={data} upd={upd} onDone={s=>setProfile({school:s})}/>}
       {editSchool && <ProfileModal uid={session.user.id} onSaved={s=>{setProfile({school:s});setEditSchool(false);}} onClose={()=>setEditSchool(false)}/>}
 
       {/* ── Renewal alerts ── */}
