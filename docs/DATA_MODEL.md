@@ -90,7 +90,8 @@ Shows when `yr.monthly.exams > 0` AND any Step goal has `saved < targetAmount &&
 
 ### Supabase tables (RLS: each user reads/writes only their own row, `auth.uid() = user_id`)
 - `app_state(user_id uuid PK, state jsonb, updated_at)` — the whole state blob, one row/user.
-- `profiles(user_id uuid PK, school text, created_at)` — null/empty school → one-time `ProfileModal`. Picker searches `US_MED_SCHOOLS` (full Wikipedia MD+DO list; entries are `{name}` or `{name, campuses:[...]}`); multi-campus schools add a campus step, stored as `"Name — Campus"`; free-text Other. Settings "Change" reopens it (dismissable). Save uses explicit `update().eq("user_id").select()` then `insert` if no row (upsert was a silent no-op).
+- `profiles(user_id uuid PK, school text, created_at)` — null/empty school → first-run `OnboardingFlow` (welcome → name → avatar → school; saves name+avatar into `app_state.state`, school into `profiles`). School-only re-edit from Settings reuses `ProfileModal` (dismissable). Picker (shared by both) searches `US_MED_SCHOOLS` (full Wikipedia MD+DO list; entries are `{name}` or `{name, campuses:[...]}`); multi-campus schools add a campus step, stored as `"Name — Campus"`; free-text Other. Save uses explicit `update().eq("user_id").select()` then `insert` if no row (upsert was a silent no-op).
+- **Identity fields in `state` (not the DB):** `preferredName` (string|null — the name used in the header greeting + settings) and `avatar` (`{type:"google",url}` | `{type:"monogram",color:<C-token key>}` | null). Set during `OnboardingFlow`; `preferredName` is also inline-editable in the Settings menu. Rendered everywhere via the `Avatar` component (Google photo / `RingMonogram` / initial-chip fallback). Header greeting picks from a daily-rotating message pool (brand voice, name-aware).
 
 ### Storage keys (localStorage = offline cache + merge ancestor; Supabase = source of truth)
 | Key | Purpose |
