@@ -1713,17 +1713,21 @@ const AV_PALETTE = [
   {key:"plum",    label:"Plum",    c:"#B07BB0",d:"#2E1A2E"},
   {key:"rose",    label:"Rose",    c:"#E08AA8",d:"#3A1426"},
   {key:"cream",   label:"Cream",   c:"#E9E2CF",d:"#2A2620"},
+  {key:"ink",     label:"Ink",     c:"#403F37",d:"#ECE6D6"},
 ];
 const avColor = key => AV_PALETTE.find(p=>p.key===key) || AV_PALETTE[0];
 
-// 30 recolorable avatar marks, drawn on a dark circular badge. Each svg(c,d) returns
-// a 0..68 SVG fragment using the accent (c) for the body and dark (d) for features.
+// 30 recolorable avatar marks, drawn on a theme-aware circular badge (dark coin in
+// dark mode, warm paper coin in light mode — see AvatarArt). Each svg(c,d,bg,hi)
+// returns a 0..68 SVG fragment: accent (c) for the body, dark (d) for features, bg
+// for cutouts that punch through to the badge (e.g. phase), hi for details that sit
+// directly on the badge and must contrast it (e.g. constellation stars).
 // Groups drive the picker's sections.
 const AVATARS = [
   {id:"seal",        label:"Rings",        group:"marks", svg:(c,d)=>`<g fill="none" stroke="${c}"><circle cx="34" cy="34" r="22" stroke-width="1.6" opacity=".38"/><circle cx="34" cy="34" r="16" stroke-width="1.7" opacity=".64"/><circle cx="34" cy="34" r="10" stroke-width="1.8"/></g><circle cx="34" cy="34" r="3.4" fill="${c}"/>`},
-  {id:"constellation",label:"Constellation",group:"marks", svg:(c,d)=>`<g stroke="${c}" stroke-width="1.6" opacity=".7" fill="none"><path d="M22 24 L38 30 L30 44 L48 40 L42 22"/></g><g fill="#F6EFDD"><circle cx="22" cy="24" r="2"/><circle cx="30" cy="44" r="2"/><circle cx="48" cy="40" r="2"/><circle cx="42" cy="22" r="2"/></g><circle cx="38" cy="30" r="3.4" fill="${c}"/>`},
+  {id:"constellation",label:"Constellation",group:"marks", svg:(c,d,bg,hi)=>`<g stroke="${c}" stroke-width="1.6" opacity=".7" fill="none"><path d="M22 24 L38 30 L30 44 L48 40 L42 22"/></g><g fill="${hi}"><circle cx="22" cy="24" r="2"/><circle cx="30" cy="44" r="2"/><circle cx="48" cy="40" r="2"/><circle cx="42" cy="22" r="2"/></g><circle cx="38" cy="30" r="3.4" fill="${c}"/>`},
   {id:"bloom",       label:"Bloom",        group:"marks", svg:(c,d)=>`<g transform="translate(34,34)"><g fill="${c}" opacity=".92"><ellipse cx="0" cy="-13" rx="4.2" ry="12"/><ellipse cx="0" cy="-13" rx="4.2" ry="12" transform="rotate(60)"/><ellipse cx="0" cy="-13" rx="4.2" ry="12" transform="rotate(120)"/><ellipse cx="0" cy="-13" rx="4.2" ry="12" transform="rotate(180)"/><ellipse cx="0" cy="-13" rx="4.2" ry="12" transform="rotate(240)"/><ellipse cx="0" cy="-13" rx="4.2" ry="12" transform="rotate(300)"/></g><circle r="5.5" fill="#F6EFDD"/></g>`},
-  {id:"phase",       label:"Phase",        group:"marks", svg:(c,d)=>`<circle cx="34" cy="34" r="20" fill="${c}"/><circle cx="26" cy="34" r="20" fill="#14150F"/><circle cx="34" cy="34" r="20" fill="none" stroke="${c}" stroke-width="1" opacity=".5"/>`},
+  {id:"phase",       label:"Phase",        group:"marks", svg:(c,d,bg,hi)=>`<circle cx="34" cy="34" r="20" fill="${c}"/><circle cx="26" cy="34" r="20" fill="${bg}"/><circle cx="34" cy="34" r="20" fill="none" stroke="${c}" stroke-width="1" opacity=".5"/>`},
   {id:"orbit",       label:"Orbit",        group:"marks", svg:(c,d)=>`<ellipse cx="34" cy="34" rx="24" ry="10" fill="none" stroke="${c}" stroke-width="1.4" opacity=".55" transform="rotate(-22 34 34)"/><circle cx="34" cy="34" r="6.5" fill="${c}"/><circle cx="55" cy="27" r="3.2" fill="${c}"/>`},
   {id:"pulse",       label:"Pulse",        group:"marks", svg:(c,d)=>`<path d="M10 34 H24 L29 22 L35 47 L40 30 H58" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`},
   {id:"facet",       label:"Facet",        group:"marks", svg:(c,d)=>`<g stroke="${d}" stroke-width=".8"><polygon points="34,14 48,28 34,34" fill="${c}"/><polygon points="34,14 20,28 34,34" fill="${c}" opacity=".8"/><polygon points="20,28 34,34 26,50" fill="${c}" opacity=".62"/><polygon points="48,28 34,34 42,50" fill="${c}" opacity=".7"/><polygon points="26,50 34,34 42,50" fill="${c}" opacity=".5"/></g>`},
@@ -1757,8 +1761,15 @@ const AV_GROUPS = [{key:"marks",label:"Marks"},{key:"chars",label:"Characters"},
 const AvatarArt = ({style, color, size=40}) => {
   const av = AVATARS.find(a=>a.id===style) || AVATARS[0];
   const pal = avColor(color);
+  // Theme-aware badge: dark coin in dark mode, warm paper coin in light mode.
+  // bg = disc colour (for marks that punch a hole to the badge, e.g. phase);
+  // hi = on-badge detail colour (cream on dark, ink on light) so stars/dots stay legible.
+  const dark = document.documentElement.dataset.theme !== "light";
+  const bg = dark ? "#14150F" : "#EAE3D2";
+  const hi = dark ? "#F6EFDD" : "#2B2920";
+  const ring = dark ? "" : `<circle cx="34" cy="34" r="33.3" fill="none" stroke="rgba(38,37,30,0.13)" stroke-width="1.4"/>`;
   return <svg width={size} height={size} viewBox="0 0 68 68" style={{flexShrink:0,display:"block",borderRadius:"50%"}} aria-hidden="true"
-    dangerouslySetInnerHTML={{__html:`<circle cx="34" cy="34" r="34" fill="#14150F"/>`+av.svg(pal.c, pal.d)}}/>;
+    dangerouslySetInnerHTML={{__html:`<circle cx="34" cy="34" r="34" fill="${bg}"/>`+av.svg(pal.c, pal.d, bg, hi)+ring}}/>;
 };
 
 // Renders the user's chosen avatar anywhere (header, settings). Handles photo
@@ -1861,22 +1872,26 @@ const MARRO_CREAM = "#F6EFDD", MARRO_GOLD = "#DDA528";
 const MarroIntro = ({size=360, loop=true, onComplete}) => {
   const ref = React.useRef(null);
   const doneRef = React.useRef(false);
+  const dark = document.documentElement.dataset.theme !== "light";
   useEffect(()=>{
     const root = ref.current; if(!root) return;
+    // Theme-aware ink: cream wordmark/rings on the dark stage, warm ink on the light stage.
+    const CREAM = dark ? "#F6EFDD" : "#2B2920";
+    const GOLD  = dark ? "#DDA528" : "#C8861A";
     const uid = "mi"+Math.random().toString(36).slice(2,8);
     root.innerHTML = `
       <svg viewBox="0 0 380 300" width="100%" style="overflow:visible;display:block" aria-hidden="true">
         <defs><clipPath id="${uid}"><rect class="mi-wrect" x="0" y="0" width="0" height="0"/></clipPath></defs>
-        <circle class="mi-ring" cx="190" cy="116" r="16" transform="rotate(-90 190 116)" style="fill:none;stroke:${MARRO_CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
-        <circle class="mi-ring" cx="190" cy="116" r="28" transform="rotate(-90 190 116)" style="fill:none;stroke:${MARRO_CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
-        <circle class="mi-ring" cx="190" cy="116" r="40" transform="rotate(-90 190 116)" style="fill:none;stroke:${MARRO_CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
-        <circle class="mi-comet" cx="190" cy="116" r="16" transform="rotate(-90 190 116)" style="fill:none;stroke:${MARRO_GOLD};stroke-width:3.6;stroke-linecap:round;filter:drop-shadow(0 0 5px rgba(221,165,40,.85));opacity:0"/>
-        <text class="mi-meas" x="190" y="262" text-anchor="middle" style="fill:${MARRO_CREAM};font-family:'Newsreader',Georgia,serif;font-size:50px;font-weight:600;letter-spacing:-1px;opacity:0">Marro</text>
+        <circle class="mi-ring" cx="190" cy="116" r="16" transform="rotate(-90 190 116)" style="fill:none;stroke:${CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
+        <circle class="mi-ring" cx="190" cy="116" r="28" transform="rotate(-90 190 116)" style="fill:none;stroke:${CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
+        <circle class="mi-ring" cx="190" cy="116" r="40" transform="rotate(-90 190 116)" style="fill:none;stroke:${CREAM};stroke-width:3.4;stroke-linecap:round;opacity:0"/>
+        <circle class="mi-comet" cx="190" cy="116" r="16" transform="rotate(-90 190 116)" style="fill:none;stroke:${GOLD};stroke-width:3.6;stroke-linecap:round;filter:drop-shadow(0 0 5px rgba(221,165,40,.85));opacity:0"/>
+        <text class="mi-meas" x="190" y="262" text-anchor="middle" style="fill:${CREAM};font-family:'Newsreader',Georgia,serif;font-size:50px;font-weight:600;letter-spacing:-1px;opacity:0">Marro</text>
         <g class="mi-letters" clip-path="url(#${uid})"></g>
-        <line class="mi-neck" x1="190" y1="116" x2="190" y2="116" stroke-width="0" style="stroke:${MARRO_GOLD};stroke-linecap:round;opacity:0;filter:drop-shadow(0 0 4px rgba(221,165,40,.7))"/>
-        <circle class="mi-lead" r="4.6" cx="0" cy="0" style="fill:${MARRO_GOLD};filter:drop-shadow(0 0 8px rgba(221,165,40,.95))"/>
-        <circle class="mi-cdot" r="3.6" cx="0" cy="0" style="fill:${MARRO_GOLD};filter:drop-shadow(0 0 5px rgba(221,165,40,.9));opacity:0"/>
-        <circle class="mi-pdot" r="4.6" cx="0" cy="0" style="fill:${MARRO_GOLD};filter:drop-shadow(0 0 7px rgba(221,165,40,.95));opacity:0"/>
+        <line class="mi-neck" x1="190" y1="116" x2="190" y2="116" stroke-width="0" style="stroke:${GOLD};stroke-linecap:round;opacity:0;filter:drop-shadow(0 0 4px rgba(221,165,40,.7))"/>
+        <circle class="mi-lead" r="4.6" cx="0" cy="0" style="fill:${GOLD};filter:drop-shadow(0 0 8px rgba(221,165,40,.95))"/>
+        <circle class="mi-cdot" r="3.6" cx="0" cy="0" style="fill:${GOLD};filter:drop-shadow(0 0 5px rgba(221,165,40,.9));opacity:0"/>
+        <circle class="mi-pdot" r="4.6" cx="0" cy="0" style="fill:${GOLD};filter:drop-shadow(0 0 7px rgba(221,165,40,.95));opacity:0"/>
       </svg>`;
     const NS="http://www.w3.org/2000/svg", cx=190, cy=116, radii=[16,28,40], baseOp=[0.72,1,1], baseY=262;
     const q = s => root.querySelector(s);
@@ -1887,7 +1902,7 @@ const MarroIntro = ({size=360, loop=true, onComplete}) => {
     rings.forEach((rg,k)=>{rg.style.strokeDasharray=ringC[k];rg.style.strokeDashoffset=ringC[k];});
     [lead,cdot,pdot].forEach(e=>{e.style.transformBox="fill-box";e.style.transformOrigin="center";});
     const WORD="Marro", total=meas.getComputedTextLength(), left=190-total/2, letterEls=[];
-    for(let i=0;i<WORD.length;i++){const sx=left+meas.getSubStringLength(0,i);const el=document.createElementNS(NS,"text");el.setAttribute("x",sx);el.setAttribute("y",baseY);el.setAttribute("text-anchor","start");el.setAttribute("style","fill:"+MARRO_CREAM+";font-family:'Newsreader',Georgia,serif;font-size:50px;font-weight:600;letter-spacing:-1px");el.textContent=WORD[i];letterEls.push(el);lettersG.appendChild(el);}
+    for(let i=0;i<WORD.length;i++){const sx=left+meas.getSubStringLength(0,i);const el=document.createElementNS(NS,"text");el.setAttribute("x",sx);el.setAttribute("y",baseY);el.setAttribute("text-anchor","start");el.setAttribute("style","fill:"+CREAM+";font-family:'Newsreader',Georgia,serif;font-size:50px;font-weight:600;letter-spacing:-1px");el.textContent=WORD[i];letterEls.push(el);lettersG.appendChild(el);}
     wrect.setAttribute("x",left-14);wrect.setAttribute("y",baseY-72);wrect.setAttribute("width",total+28);wrect.setAttribute("height",76);
     const clamp=x=>x<0?0:x>1?1:x, lerp=(a,b,u)=>a+(b-a)*u;
     const eoB=u=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(u-1,3)+c1*Math.pow(u-1,2);};
@@ -1930,10 +1945,13 @@ const MarroIntro = ({size=360, loop=true, onComplete}) => {
     raf=requestAnimationFrame(run);
     return ()=>cancelAnimationFrame(raf);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[dark]);
   return <div ref={ref} style={{width:size,maxWidth:"100%",margin:"0 auto",borderRadius:18,overflow:"hidden",
-    background:"radial-gradient(130% 120% at 50% 30%, #1c1d17 0%, #101210 72%)",
-    border:"1px solid rgba(246,239,221,0.09)",padding:"6px 0",boxSizing:"border-box"}}/>;
+    background: dark
+      ? "radial-gradient(130% 120% at 50% 30%, #1c1d17 0%, #101210 72%)"
+      : "radial-gradient(130% 120% at 50% 30%, #FBF7EC 0%, #ECE4D1 72%)",
+    border: dark ? "1px solid rgba(246,239,221,0.09)" : "1px solid rgba(38,37,30,0.10)",
+    padding:"6px 0",boxSizing:"border-box"}}/>;
 };
 
 // First-run welcome — a guided, branded setup: name → avatar → school. Replaces the
