@@ -573,7 +573,7 @@ function fmtConflictVal(key, val, data) {
 }
 function conflictLabel(key, data) {
   const cats=data?.categories||[], catLabel=id=>cats.find(c=>c.id===id)?.label||id;
-  const YN=['Year 1','Year 2','Year 3','Year 4','Extended'];
+  const YN=['Year 1','Year 2','Year 3','Year 4'];  // beyond this, the +1 fallback labels "Year N"
   let m;
   m=key.match(/^years\[(\d+)\]\.monthly\.(.+)$/);         if (m) return `${YN[+m[1]]||'Year '+(+m[1]+1)} — ${catLabel(m[2])} budget`;
   m=key.match(/^years\[(\d+)\]\.monthlyOverrides\.(\w+)\.(.+)$/); if (m) return `${YN[+m[1]]||'Year '+(+m[1]+1)} — ${catLabel(m[3])} override (${m[2]})`;
@@ -924,16 +924,12 @@ const blankYearFields = () => ({ tuitionFees:0, healthIns:0, grant:0, otherIncom
 // This is the swappable seam for the future user-corrected / fetched-calendar
 // tiers (LLM-extracted school calendars) — see docs/FUTURE_WORK.md Phase 3 vision.
 const yr2 = y => String(y % 100).padStart(2,"0");
-function generateYearConfigs(startYear, lengthYears, extendedYear){
+function generateYearConfigs(startYear, lengthYears){
   const n = Math.max(1, lengthYears|0);
   const out = [];
   for(let i=0;i<n;i++){
     const sy = startYear + i;
-    out.push({ id:i, label:`Year ${i+1} — ${sy}-${yr2(sy+1)}`, type:"standard", ...blankYearFields(), startDate:`${sy}-08-01`, endDate:`${sy+1}-08-15` });
-  }
-  if(extendedYear){
-    const sy = startYear + n;
-    out.push({ id:n, label:`Extended — ${sy}-${yr2(sy+1)}`, type:"extended", ...blankYearFields(), startDate:`${sy}-08-01`, endDate:`${sy+1}-06-30` });
+    out.push({ id:i, label:`Year ${i+1} — ${sy}-${yr2(sy+1)}`, ...blankYearFields(), startDate:`${sy}-08-01`, endDate:`${sy+1}-08-15` });
   }
   return out;
 }
@@ -961,7 +957,7 @@ const SETUP_VERSION = 1;
 const DEFAULT_STATE = {
   setupVersion: null,  // null = brand new (run onboarding); set to SETUP_VERSION when complete
   categories: DEFAULT_CATS,
-  years: generateYearConfigs(new Date().getFullYear(), 4, false).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}})),
+  years: generateYearConfigs(new Date().getFullYear(), 4).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}})),
   weeklyArchive: [],
   currentWeekEntries: [],
   subscriptions: [],
@@ -974,6 +970,9 @@ const DEFAULT_STATE = {
   monthDisabled: {},  // {"0-Aug":["exams"], "0-Sep":["books"]} — yearId-month: disabled cat ids
   preferredName: null,
   avatar: null,  // {type:"art",style,color} | {type:"google",url} | {type:"upload",url} | null
+  // Program track. degree derived from school; dual = null|"phd"|"masters"|"other".
+  // phd/masters institution "" = same as the med school. All editable later in Settings.
+  program: { degree:"MD", dual:null, phd:{field:"",institution:""}, masters:{field:"",institution:""}, other:{field:"",institution:""} },
   darkMode: false,
   stepGoals: [
     { id:"step1", label:"Step 1", targetAmount:850, targetDate:"2028-06-01", saved:0, monthlyContribution:50 },
@@ -1306,7 +1305,6 @@ const YrBtn = ({yr, active, onClick}) => (
     boxShadow: active ? "0 1px 8px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)" : "none",
   }}>
     {yr.label.split("—")[0].trim()}
-    {yr.type==="extended" ? <Icon name="star" size={9} style={{marginLeft:3,verticalAlign:"-1px"}}/> : ""}
   </button>
 );
 
@@ -1632,6 +1630,114 @@ const US_MED_SCHOOLS = [
   {name:"Pacific Northwest University of Health Sciences College of Osteopathic Medicine"},
   {name:"West Virginia School of Osteopathic Medicine"},
 ];
+
+// Degree is derivable from the school name — every COCA school says "Osteopathic"; no LCME school does.
+const degreeForSchool = name => /osteopathic/i.test(name||"") ? "DO" : "MD";
+// DO dual-degree programs are rare, so they're gated to a curated set (matched by name prefix —
+// the stored school may carry a "— Campus" suffix). "Other" + free-text always remain available so an
+// incomplete list never blocks onboarding. Expand as more DO/PhD & DO-dual programs are confirmed.
+const DO_DUAL = {
+  "Michigan State University College of Osteopathic Medicine": ["phd","masters"],
+  "Rowan-Virtua School of Osteopathic Medicine": ["phd","masters"],
+  "New York Institute of Technology College of Osteopathic Medicine": ["phd","masters"],
+  "Nova Southeastern University Dr. Kiran C. Patel College of Osteopathic Medicine": ["phd","masters"],
+  "Ohio University Heritage College of Osteopathic Medicine": ["phd","masters"],
+  "University of North Texas Health Science Center Texas College of Osteopathic Medicine": ["phd","masters"],
+  "Philadelphia College of Osteopathic Medicine (PCOM)": ["masters"],
+  "A.T. Still University Kirksville College of Osteopathic Medicine": ["masters"],
+  "Des Moines University College of Osteopathic Medicine": ["masters"],
+  "Western University of Health Sciences College of Osteopathic Medicine of the Pacific": ["masters"],
+};
+// Which dual tracks (phd/masters) to offer for a school string: MD → both for everyone; DO → curated only.
+const dualOptionsForSchool = name => {
+  if(degreeForSchool(name)==="MD") return ["phd","masters"];
+  const key = Object.keys(DO_DUAL).find(k => (name||"").startsWith(k));
+  return key ? DO_DUAL[key] : [];
+};
+
+// Settings → edit program track (dual degree + PhD/Master's field & institution) any time.
+// Degree is derived from the school (read-only here). Does NOT regenerate years — year count
+// is managed in the Aid tab so budget data is never wiped.
+const ProgramModal = ({data, upd, school, onClose}) => {
+  const dp = data.program || {};
+  const [dual, setDual]       = useState(dp.dual ?? null);
+  const [phdField, setPhdField] = useState(dp.phd?.field||"");
+  const [phdSame, setPhdSame]   = useState(!(dp.phd?.institution));
+  const [phdInst, setPhdInst]   = useState(dp.phd?.institution||"");
+  const [mastField, setMastField] = useState(dp.masters?.field||"");
+  const [mastSame, setMastSame]   = useState(!(dp.masters?.institution));
+  const [mastInst, setMastInst]   = useState(dp.masters?.institution||"");
+  const [otherField, setOtherField] = useState(dp.other?.field||"");
+  const [otherSame, setOtherSame]   = useState(!(dp.other?.institution));
+  const [otherInst, setOtherInst]   = useState(dp.other?.institution||"");
+  const degree = degreeForSchool(school);
+  const dualOpts = dualOptionsForSchool(school);
+  const tracks = [{v:null,label:`${degree} only`}];
+  if(dualOpts.includes("phd"))     tracks.push({v:"phd",    label:`${degree}-PhD`});
+  if(dualOpts.includes("masters")) tracks.push({v:"masters",label:`${degree} + Master's`});
+  tracks.push({v:"other",label:"Other dual degree"});
+  const fieldStyle = {width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 11px",background:C.bg,color:C.text,boxSizing:"border-box"};
+  const instBlock = (same,setSame,inst,setInst,ph) => (
+    <div style={{marginTop:8}}>
+      <div style={{display:"flex",gap:6}}>
+        {[{s:true,l:"Same as my school"},{s:false,l:"Different"}].map(o=>(
+          <button key={String(o.s)} onClick={()=>setSame(o.s)} style={{flex:1,padding:"8px 0",borderRadius:9,border:`1px solid ${same===o.s?C.sel:C.border}`,background:same===o.s?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:same===o.s?700:500,cursor:"pointer"}}>{o.l}</button>
+        ))}
+      </div>
+      {!same && <input value={inst} onChange={e=>setInst(e.target.value)} placeholder={ph} style={{...fieldStyle,marginTop:6}}/>}
+    </div>
+  );
+  const save = () => {
+    const d=JSON.parse(JSON.stringify(data));
+    d.program = {
+      degree, dual: dual||null,
+      phd:     { field: dual==="phd"?phdField.trim():"",      institution: dual==="phd"&&!phdSame?phdInst.trim():"" },
+      masters: { field: dual==="masters"?mastField.trim():"", institution: dual==="masters"&&!mastSame?mastInst.trim():"" },
+      other:   { field: dual==="other"?otherField.trim():"",   institution: dual==="other"&&!otherSame?otherInst.trim():"" },
+    };
+    upd(d); onClose();
+  };
+  return (
+    <Modal title="Program" onClose={onClose} width={420}>
+      <div style={{fontSize:12.5,color:C.textMid,marginBottom:12}}>You're in a <strong style={{color:C.text}}>{degree}</strong> program (set by your school). Are you pursuing a dual degree?</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {tracks.map(t=>{
+          const on = dual===t.v;
+          return <button key={String(t.v)} onClick={()=>setDual(t.v)} style={{flex:"1 1 45%",padding:"11px 10px",borderRadius:12,border:`1px solid ${on?C.sel:C.border}`,background:on?C.selBg:"transparent",color:C.text,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .15s"}}>{t.label}</button>;
+        })}
+      </div>
+      {dual==="phd" && (
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>PhD field <span style={{color:C.gray}}>(if you know it)</span></div>
+          <input value={phdField} onChange={e=>setPhdField(e.target.value)} placeholder="e.g. Neuroscience, Immunology" style={fieldStyle}/>
+          <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>PhD-granting institution</div>
+          {instBlock(phdSame,setPhdSame,phdInst,setPhdInst,"Institution name")}
+        </div>
+      )}
+      {dual==="masters" && (
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>Master's field <span style={{color:C.gray}}>(if you know it)</span></div>
+          <input value={mastField} onChange={e=>setMastField(e.target.value)} placeholder="e.g. MPH, MBA, MS Clinical Research" style={fieldStyle}/>
+          <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>Master's-granting institution</div>
+          {instBlock(mastSame,setMastSame,mastInst,setMastInst,"Institution name")}
+        </div>
+      )}
+      {dual==="other" && (
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>What dual degree?</div>
+          <input value={otherField} onChange={e=>setOtherField(e.target.value)} placeholder="e.g. MD-JD, MD-MPP, DO-MBA" style={fieldStyle}/>
+          <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>Granting institution</div>
+          {instBlock(otherSame,setOtherSame,otherInst,setOtherInst,"Institution name")}
+        </div>
+      )}
+      <div style={{fontSize:11,color:C.gray,marginTop:14}}>Changing your number of years? Add or remove years in the Aid tab — that keeps your budget data intact.</div>
+      <div style={{display:"flex",gap:8,marginTop:16}}>
+        <button onClick={save} style={{flex:1,padding:"11px",fontSize:13.5,fontWeight:600,border:"none",borderRadius:10,background:C.teal,color:C.bg,cursor:"pointer"}}>Save</button>
+        <button onClick={onClose} style={{padding:"11px 16px",fontSize:13.5,border:`1px solid ${C.border}`,borderRadius:10,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
+      </div>
+    </Modal>
+  );
+};
 
 // One-time profile completion after first login (required, no dismiss). Also reused from
 // settings to change school later (dismissable when onClose is provided). Captures the
@@ -1983,10 +2089,19 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
   // Prefill from existing identity when re-running setup; fall back to Google/defaults first-run.
   const [name, setName] = useState(data.preferredName || googleFirst);
   const [avatar, setAvatar] = useState(data.avatar || (googlePhoto ? {type:"google",url:googlePhoto} : {type:"art",style:"buddy",color:"marigold"}));
-  // program shape — prefill from existing years on redo
-  const existingStd = (data.years||[]).filter(y=>y.type!=="extended").length || 4;
-  const [progLen, setProgLen] = useState(existingStd);
-  const [extYr, setExtYr] = useState((data.years||[]).some(y=>y.type==="extended"));
+  // program shape + dual-degree track — prefill from existing data on redo
+  const [progLen, setProgLen] = useState((data.years||[]).length || 4);
+  const [dual, setDual]       = useState(data.program?.dual ?? null);   // null|"phd"|"masters"|"other"
+  const [phdField, setPhdField] = useState(data.program?.phd?.field || "");
+  const [phdSame, setPhdSame]   = useState(!(data.program?.phd?.institution));   // true = same as med school
+  const [phdInst, setPhdInst]   = useState(data.program?.phd?.institution || "");
+  const [mastField, setMastField] = useState(data.program?.masters?.field || "");
+  const [mastSame, setMastSame]   = useState(!(data.program?.masters?.institution));
+  const [mastInst, setMastInst]   = useState(data.program?.masters?.institution || "");
+  const [otherField, setOtherField] = useState(data.program?.other?.field || "");
+  const [otherSame, setOtherSame]   = useState(!(data.program?.other?.institution));
+  const [otherInst, setOtherInst]   = useState(data.program?.other?.institution || "");
+  const suggestLen = d => d==="phd"?8:d==="masters"?5:4;
   // school picker state (mirrors ProfileModal)
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState(null);
@@ -2012,9 +2127,18 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
     const d = JSON.parse(JSON.stringify(data));
     d.preferredName = name.trim() || null;
     d.avatar = avatar;
-    // First-run only: generate the year configs from the chosen program shape.
+    // Program track — captured on first-run AND redo (it doesn't touch year data). Degree is
+    // derived from the school; institution "" means same as the med school.
+    d.program = {
+      degree: degreeForSchool(school),
+      dual: dual || null,
+      phd:     { field: dual==="phd"?phdField.trim():"",       institution: dual==="phd"&&!phdSame?phdInst.trim():"" },
+      masters: { field: dual==="masters"?mastField.trim():"",  institution: dual==="masters"&&!mastSame?mastInst.trim():"" },
+      other:   { field: dual==="other"?otherField.trim():"",   institution: dual==="other"&&!otherSame?otherInst.trim():"" },
+    };
+    // First-run only: generate the year configs from the chosen program length.
     // On redo we never touch years (would wipe the user's budget data).
-    if(firstRun) d.years = generateYearConfigs(new Date().getFullYear(), progLen, extYr).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
+    if(firstRun) d.years = generateYearConfigs(new Date().getFullYear(), progLen).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
     d.setupVersion = SETUP_VERSION;
     upd(d);
     setStep(5);
@@ -2112,31 +2236,78 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
             </div>
           )}
 
-          {step===4 && (
+          {step===4 && (()=>{
+            const degree = degreeForSchool(school);
+            const dualOpts = dualOptionsForSchool(school);
+            const tracks = [{v:null,label:`${degree} only`}];
+            if(dualOpts.includes("phd"))     tracks.push({v:"phd",    label:`${degree}-PhD`});
+            if(dualOpts.includes("masters")) tracks.push({v:"masters",label:`${degree} + Master's`});
+            tracks.push({v:"other",label:"Other dual degree"});
+            const pickTrack = v => { setDual(v); if(firstRun) setProgLen(suggestLen(v)); };
+            const fieldStyle = {width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 11px",background:C.bg,color:C.text,boxSizing:"border-box"};
+            const instBlock = (same,setSame,inst,setInst,ph) => (
+              <div style={{marginTop:8}}>
+                <div style={{display:"flex",gap:6}}>
+                  {[{s:true,l:"Same as my school"},{s:false,l:"Different"}].map(o=>(
+                    <button key={String(o.s)} onClick={()=>setSame(o.s)} style={{flex:1,padding:"8px 0",borderRadius:9,border:`1px solid ${same===o.s?C.sel:C.border}`,background:same===o.s?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:same===o.s?700:500,cursor:"pointer"}}>{o.l}</button>
+                  ))}
+                </div>
+                {!same && <input value={inst} onChange={e=>setInst(e.target.value)} placeholder={ph} style={{...fieldStyle,marginTop:6}}/>}
+              </div>
+            );
+            return (
             <div>
-              <div style={head}>How long is your program?</div>
-              <div style={sub}>This sets up your academic years. You can fine-tune dates and add or remove years anytime.</div>
-              <div style={{display:"flex",gap:8,marginTop:20}}>
-                {[3,4,5,6].map(n=>(
-                  <button key={n} onClick={()=>setProgLen(n)} style={{flex:1,padding:"14px 0",borderRadius:12,border:`1px solid ${progLen===n?C.sel:C.border}`,background:progLen===n?C.selBg:"transparent",color:C.text,fontSize:15,fontWeight:progLen===n?700:500,cursor:"pointer",transition:"all .2s"}}>{n}</button>
+              <div style={head}>Your program</div>
+              <div style={sub}>This sets up your academic years and tailors Marro to your path. Don't know all of it yet? You can change any of this later in Settings.</div>
+
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginTop:18,marginBottom:8}}>{degree} program — are you doing a dual degree?</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {tracks.map(t=>{
+                  const on = dual===t.v;
+                  return <button key={String(t.v)} onClick={()=>pickTrack(t.v)} style={{flex:"1 1 45%",padding:"12px 10px",borderRadius:12,border:`1px solid ${on?C.sel:C.border}`,background:on?C.selBg:"transparent",color:C.text,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .15s"}}>{t.label}</button>;
+                })}
+              </div>
+
+              {dual==="phd" && (
+                <div style={{marginTop:14,padding:"12px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface}}>
+                  <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>PhD field <span style={{color:C.gray}}>(if you know it)</span></div>
+                  <input value={phdField} onChange={e=>setPhdField(e.target.value)} placeholder="e.g. Neuroscience, Immunology" style={fieldStyle}/>
+                  <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>PhD-granting institution</div>
+                  {instBlock(phdSame,setPhdSame,phdInst,setPhdInst,"Institution name")}
+                </div>
+              )}
+              {dual==="masters" && (
+                <div style={{marginTop:14,padding:"12px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface}}>
+                  <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>Master's field <span style={{color:C.gray}}>(if you know it)</span></div>
+                  <input value={mastField} onChange={e=>setMastField(e.target.value)} placeholder="e.g. MPH, MBA, MS Clinical Research" style={fieldStyle}/>
+                  <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>Master's-granting institution</div>
+                  {instBlock(mastSame,setMastSame,mastInst,setMastInst,"Institution name")}
+                </div>
+              )}
+              {dual==="other" && (
+                <div style={{marginTop:14,padding:"12px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface}}>
+                  <div style={{fontSize:12,color:C.textMid,marginBottom:5}}>What dual degree?</div>
+                  <input value={otherField} onChange={e=>setOtherField(e.target.value)} placeholder="e.g. MD-JD, MD-MPP, DO-MBA" style={fieldStyle}/>
+                  <div style={{fontSize:12,color:C.textMid,marginTop:10,marginBottom:1}}>Granting institution</div>
+                  {instBlock(otherSame,setOtherSame,otherInst,setOtherInst,"Institution name")}
+                </div>
+              )}
+
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginTop:20,marginBottom:8}}>How many years total?</div>
+              <div style={{display:"flex",gap:6}}>
+                {[3,4,5,6,7,8].map(n=>(
+                  <button key={n} onClick={()=>setProgLen(n)} style={{flex:1,padding:"13px 0",borderRadius:11,border:`1px solid ${progLen===n?C.sel:C.border}`,background:progLen===n?C.selBg:"transparent",color:C.text,fontSize:15,fontWeight:progLen===n?700:500,cursor:"pointer",transition:"all .2s"}}>{n}</button>
                 ))}
               </div>
-              <div style={{fontSize:11,color:C.gray,textAlign:"center",marginTop:8}}>years</div>
-              <button onClick={()=>setExtYr(v=>!v)} role="checkbox" aria-checked={extYr} style={{display:"flex",alignItems:"center",gap:10,width:"100%",marginTop:18,padding:"12px 14px",borderRadius:12,border:`1px solid ${extYr?C.sel:C.border}`,background:extYr?C.selBg:"transparent",cursor:"pointer",textAlign:"left"}}>
-                <span style={{flexShrink:0,width:18,height:18,borderRadius:5,border:`1.5px solid ${extYr?C.marigold:C.border}`,background:extYr?C.marigold:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:C.bg,fontSize:12,fontWeight:700}}>{extYr?"✓":""}</span>
-                <span style={{display:"flex",flexDirection:"column"}}>
-                  <span style={{fontSize:13.5,color:C.text,fontWeight:600}}>I have an extra / research year</span>
-                  <span style={{fontSize:11.5,color:C.textMid,marginTop:1}}>Adds a separate extended year to your plan</span>
-                </span>
-              </button>
               {firstRun
-                ? <div style={{fontSize:11,color:C.gray,marginTop:14}}>We'll start your first year this {new Date().getFullYear()} — change it anytime in the Aid tab.</div>
-                : <div style={{fontSize:11,color:C.gray,marginTop:14}}>Your existing year data is kept — use the Aid tab to add or remove years.</div>}
+                ? <div style={{fontSize:11,color:C.gray,marginTop:10}}>We'll start your first year this {new Date().getFullYear()} — change dates anytime in the Aid tab.</div>
+                : <div style={{fontSize:11,color:C.gray,marginTop:10}}>Your existing year data is kept — use the Aid tab to add or remove years.</div>}
               {err && <div role="alert" style={{marginTop:12,fontSize:12,color:C.danger}}>{err}</div>}
               <button className="ob-cta" style={{...ctaPrimary(!saving),marginTop:err?12:18}} disabled={saving} onClick={finish}>{saving?"Setting up…":"Finish"}</button>
               <button onClick={()=>setStep(3)} style={{display:"block",margin:"12px auto 0",border:"none",background:"transparent",color:C.textMid,fontSize:12.5,cursor:"pointer"}}>← Back</button>
             </div>
-          )}
+            );
+          })()}
 
           {step===5 && (
             <div style={{textAlign:"center",padding:"10px 0"}}>
@@ -2423,6 +2594,7 @@ function App() {
   const [session, setSession] = useState(undefined); // undefined=restoring, null=logged out, obj=logged in
   const [profile, setProfile] = useState(null);      // {school} | null (no row yet → ProfileModal)
   const [editSchool, setEditSchool] = useState(false); // settings → reopen ProfileModal to change school
+  const [editProgram, setEditProgram] = useState(false); // settings → edit program track (ProgramModal)
   const [editName, setEditName] = useState(false); // settings → inline name editor
   const [editAvatar, setEditAvatar] = useState(false); // settings → avatar editor modal
   const [redoSetup, setRedoSetup] = useState(false); // settings → replay the onboarding flow
@@ -2575,16 +2747,38 @@ function App() {
         // progressive setup — treat them as current so we don't nag them for v1 steps
         // (their years are already configured). Brand-new states keep null → onboarding.
         if(loaded.setupVersion===undefined) loaded.setupVersion = raw ? SETUP_VERSION : null;
+        // Program track (dual-degree). Backfill the shape; degree is re-derived from the
+        // school wherever it's used, so a missing/stale value here is harmless.
+        if(!loaded.program || typeof loaded.program!=="object")
+          loaded.program = JSON.parse(JSON.stringify(DEFAULT_STATE.program));
+        else {
+          const dp=DEFAULT_STATE.program;
+          if(loaded.program.dual===undefined) loaded.program.dual=null;
+          if(!loaded.program.phd) loaded.program.phd={...dp.phd};
+          if(!loaded.program.masters) loaded.program.masters={...dp.masters};
+          if(!loaded.program.other || typeof loaded.program.other!=="object")
+            loaded.program.other={field: typeof loaded.program.other==="string"?loaded.program.other:"", institution:""};
+          if(!loaded.program.degree) loaded.program.degree=dp.degree;
+        }
         // Year migrations (school-agnostic — never inject any school's numbers).
         if(!Array.isArray(loaded.years) || !loaded.years.length)
-          loaded.years = generateYearConfigs(new Date().getFullYear(), 4, false).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
+          loaded.years = generateYearConfigs(new Date().getFullYear(), 4).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
         loaded.years.forEach(y=>{
           // Rename legacy WCM-named field → generic livingAllowance
           if(y.wcmLivingAllowance!==undefined){ if(y.livingAllowance===undefined) y.livingAllowance=y.wcmLivingAllowance; delete y.wcmLivingAllowance; }
+          // Retire the extended/standard distinction — every year is just a numbered year now.
+          if(y.type!==undefined) delete y.type;
           // Backfill any missing fields with safe zeros (no school defaults)
           for(const [k,v] of Object.entries(blankYearFields())) if(y[k]===undefined) y[k]=v;
           if(!y.monthly) y.monthly={...BLANK_MONTHLY};
           if(!y.monthlyOverrides) y.monthlyOverrides={};
+        });
+        // Relabel sequentially so a converted "Extended" year becomes the next "Year N"
+        // (data is untouched — only the label/number changes).
+        loaded.years.forEach((y,i)=>{
+          const sy=y.startDate?new Date(y.startDate+"T12:00:00").getFullYear():new Date().getFullYear()+i;
+          const ey=y.endDate?new Date(y.endDate+"T12:00:00").getFullYear():sy+1;
+          y.label=`Year ${i+1} — ${sy}-${yr2(ey)}`;
         });
         setData(loaded);
         // Profile (school). No row → {school:null} triggers the one-time ProfileModal.
@@ -3103,13 +3297,13 @@ function App() {
   const addYear = (start,end) => {
     const d=JSON.parse(JSON.stringify(data));
     const newId=Math.max(...d.years.map(y=>y.id),-1)+1;
-    const yrNum=d.years.filter(y=>y.type!=="extended").length+1;
+    const yrNum=d.years.length+1;
     const last=d.years[d.years.length-1]||{};
     const sy=start?new Date(start+"T12:00:00").getFullYear():new Date().getFullYear()+d.years.length;
     const ey=end?new Date(end+"T12:00:00").getFullYear():sy+1;
     // Inherit the previous year's figures (the user's own data), not any school's defaults.
     d.years.push({
-      id:newId, label:`Year ${yrNum} — ${sy}-${String(ey).slice(2)}`, type:"standard",
+      id:newId, label:`Year ${yrNum} — ${sy}-${String(ey).slice(2)}`,
       tuitionFees:Number(last.tuitionFees)||0, healthIns:Number(last.healthIns)||0,
       grant:Number(last.grant)||0, otherIncome:Number(last.otherIncome)||0,
       housing:Number(last.housing)||0, housingNote:last.housingNote||"",
@@ -3123,14 +3317,11 @@ function App() {
     const d=JSON.parse(JSON.stringify(data));
     if(d.years.length<=1) return;
     d.years=d.years.filter(y=>y.id!==yid);
-    // Re-number standard years
-    let n=1;
-    d.years.forEach(y=>{
-      if(y.type!=="extended"){
-        const sy=y.startDate?new Date(y.startDate+"T12:00:00").getFullYear():2025+n;
-        const ey=y.endDate?new Date(y.endDate+"T12:00:00").getFullYear():sy+1;
-        y.label=`Year ${n} — ${sy}-${String(ey).slice(2)}`; n++;
-      }
+    // Re-number remaining years sequentially
+    d.years.forEach((y,i)=>{
+      const sy=y.startDate?new Date(y.startDate+"T12:00:00").getFullYear():2025+i;
+      const ey=y.endDate?new Date(y.endDate+"T12:00:00").getFullYear():sy+1;
+      y.label=`Year ${i+1} — ${sy}-${String(ey).slice(2)}`;
     });
     upd(d);
     if(ay===yid) setAy(d.years[0].id);
@@ -3140,7 +3331,7 @@ function App() {
 
   const barData = data.years.map(y=>{
     const sp=Math.round((Math.max((Number(y.grant)||0)-(Number(y.tuitionFees)||0)-(Number(y.healthIns)||0),0)+(Number(y.otherIncome)||0)*12)/12);
-    return {name:y.label.split("—")[0].trim().replace("Year ","Y").replace("Extended","Ext"),Spendable:sp,Spend:Math.round(moTotal({...y.monthly,subs:subsMo}))};
+    return {name:y.label.split("—")[0].trim().replace("Year ","Y"),Spendable:sp,Spend:Math.round(moTotal({...y.monthly,subs:subsMo}))};
   });
 
   // Rollover recommendation
@@ -3600,6 +3791,19 @@ function App() {
                         <span style={{fontSize:10.5,color:C.teal,flexShrink:0}}>Change</span>
                       </button>
                     )}
+                    {profile?.school && (()=>{
+                      const deg=degreeForSchool(profile.school), dp=data.program||{};
+                      const summary = dp.dual==="phd" ? `${deg}-PhD${dp.phd?.field?` · ${dp.phd.field}`:""}`
+                        : dp.dual==="masters" ? `${deg} + Master's${dp.masters?.field?` · ${dp.masters.field}`:""}`
+                        : dp.dual==="other" ? `${deg}${dp.other?.field?` · ${dp.other.field}`:" · dual degree"}` : `${deg} only`;
+                      return (
+                        <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);setEditProgram(true);setEditName(false);}} title={summary}
+                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",marginTop:4,padding:"5px 8px",borderRadius:6,border:"none",background:C.surfaceMid,cursor:"pointer",textAlign:"left"}}>
+                          <span style={{fontSize:10.5,color:C.gray,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</span>
+                          <span style={{fontSize:10.5,color:C.teal,flexShrink:0}}>Change</span>
+                        </button>
+                      );
+                    })()}
                   </div>
                   {/* Actions */}
                   <div style={{padding:"4px 0"}}>
@@ -3651,6 +3855,7 @@ function App() {
       {/* Existing users who finished onboarding but are behind on a newer setup question */}
       {profile && profile.school && !redoSetup && (data.setupVersion||0) < SETUP_VERSION && <ProgressiveSetup data={data} upd={upd}/>}
       {editSchool && <ProfileModal uid={session.user.id} onSaved={s=>{setProfile({school:s});setEditSchool(false);}} onClose={()=>setEditSchool(false)}/>}
+      {editProgram && <ProgramModal data={data} upd={upd} school={profile.school} onClose={()=>setEditProgram(false)}/>}
       {editAvatar && <AvatarModal data={data} upd={upd} user={session.user} onClose={()=>setEditAvatar(false)}/>}
 
       {/* ── Renewal alerts ── */}
@@ -4794,7 +4999,6 @@ function App() {
                     </div>
                     <Pill ok={moS>=0} warn={moS<0}>{fmtS(moS)}/mo</Pill>
                   </div>
-                  {y.type==="extended" && <Banner type="warn">Extended year: tuition waived, fees only</Banner>}
                   {[
                     {label:"Grant (annual)",       field:"grant",       note:"includes health insurance"},
                     {label:"Tuition & fees",            field:"tuitionFees", note:"paid directly to school"},
@@ -5030,18 +5234,58 @@ function App() {
 
           <Card>
             <SectionTitle>Key notes</SectionTitle>
-            {[
-              {title:"Monthly spendable", body:"What's left of your grant each month after tuition and health insurance (see the Monthly spendable tile above). It covers rent, food, transport, and everything else. NYC is expensive — plan carefully."},
-              {title:"Health insurance",  body:"Covered by your grant. It's deducted from the grant before disbursement, not from your living budget."},
-              {title:"Extended year",     body:"Tuition waived, fees only (~$5,232). Your grant for that year is TBD — contact your financial aid office early."},
-              {title:"USMLE exams",       body:"Steps 1 and 2 cost ~$670–950 each and aren't auto-covered. Use the exam fund budget line and start saving Year 1."},
-              {title:"Weekly rollover",   body:"Unspent weekly balance rolls into the next week automatically. Unspent monthly balance rolls into the following month with a spending recommendation."},
-            ].map((n,i)=>(
-              <div key={i} style={{padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
-                <div style={{fontWeight:600,fontSize:12,color:C.text,marginBottom:3}}>{n.title}</div>
-                <div style={{fontSize:12,color:C.gray,lineHeight:1.6}}>{n.body}</div>
-              </div>
-            ))}
+            {/* Notes are derived from the user's own numbers (active year + goals), not hardcoded —
+                they update as the user fills in the Aid tab, budget, and savings goals. */}
+            {(()=>{
+              const notes=[];
+              const g=Number(yr.grant)||0, tf=Number(yr.tuitionFees)||0, hi=Number(yr.healthIns)||0;
+              const housing=Number(yr.monthly.housing)||0;
+
+              // 1. Monthly spendable — from this year's real grant/costs
+              if(g>0){
+                notes.push({title:`Monthly spendable · ${yr.label}`,
+                  body:`Your grant this year is ${fmt(g)}. After ${fmt(tf)} tuition & fees${hi>0?` and ${fmt(hi)} health insurance`:""}, ${fmt(annDisburse)} is disbursed to you — about ${fmt(moSpendable)}/mo for rent, food, transport, and everything else.`});
+              } else {
+                notes.push({title:"Monthly spendable",
+                  body:"Add your grant and school costs in the Aid tab — Marro will then show exactly what you have to spend each month."});
+              }
+
+              // 2. Housing ratio — only once rent is entered
+              if(housing>0 && moSpendable>0){
+                const pct=Math.round(housing/moSpendable*100);
+                notes.push({title:"Housing",
+                  body:`Your rent is ${fmt(housing)}/mo — ${pct}% of your spendable. ${pct<60?"That's a healthy share (under 60%).":pct<75?"That's on the high side; under 60% leaves more breathing room.":"That's a large share; getting under 60% would free up a lot elsewhere."}`});
+              }
+
+              // 3. Health insurance — only if the grant covers it
+              if(hi>0){
+                notes.push({title:"Health insurance",
+                  body:`Your health insurance (${fmt(hi)}/yr) comes out of your grant before it reaches you — it's already accounted for, not part of your living budget.`});
+              }
+
+              // 4. USMLE / Step exams — from the user's own goals + exam budget
+              const steps=data.stepGoals||[];
+              if(steps.length){
+                const target=steps.reduce((a,s)=>a+(Number(s.targetAmount)||0),0);
+                const saved=steps.reduce((a,s)=>a+(Number(s.saved)||0),0);
+                const exB=Number(yr.monthly.exams)||0;
+                notes.push({title:"USMLE / Step exams",
+                  body:exB>0
+                    ? `Your Step exams total about ${fmt(target)}. You've saved ${fmt(saved)} so far at ${fmt(exB)}/mo from your exam budget.`
+                    : `Your Step exams will run about ${fmt(target)} total and aren't auto-covered. Add an exam budget line so you're ready when they come.`});
+              }
+
+              // 5. Rollover — universal app behavior, not school-specific
+              notes.push({title:"Rollover",
+                body:"Unspent weekly money rolls into next week automatically. Leftover monthly money rolls into the next month with a suggestion for what to do with it."});
+
+              return notes.map((n,i)=>(
+                <div key={i} style={{padding:"10px 0",borderBottom:i<notes.length-1?`1px solid ${C.border}`:"none"}}>
+                  <div style={{fontWeight:600,fontSize:12,color:C.text,marginBottom:3}}>{n.title}</div>
+                  <div style={{fontSize:12,color:C.gray,lineHeight:1.6}}>{n.body}</div>
+                </div>
+              ));
+            })()}
           </Card>
         </div>
       )}
