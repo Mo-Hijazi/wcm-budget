@@ -2,6 +2,8 @@
 
 Decision · rationale · date.
 
+- **All CDN `<script>` deps are version-pinned — never use an unpinned/`@latest` URL.** `@babel/standalone` was loaded unpinned; unpkg auto-upgraded it to 8.0.2, whose preset-react defaults to the automatic JSX runtime and injects a top-level `import` into the compiled output. Our app script is a classic `text/babel` script (not a module), so that import is a fatal parse error ("Cannot use import statement outside a module") — React never mounts and the static boot rings hang forever. Hit local + production identically. Pinned Babel to `7.29.7` (classic `React.createElement`, no imports). If migrating to Babel 8 later, must also force `{runtime:"classic"}` on preset-react or switch the script to a real module bundle. (2026-06-20)
+
 - **Neutral dual-theme identity replaces green "candlelight"** — dark = warm near-black `#101210`, light = warm off-white `#F5F4EF`, both with dynamic blobs; marigold + cream + growth rings carry the brand. Rationale: the green ambient layer raised red-green colorblindness concerns and tied the look to one mood; neutral scales to a national audience. (2026-06-11)
 - **Blue vs amber is the positive/negative data pair** (`pos #82AEDB` / `neg #E5A23E` dark) — chosen for deuteranopia/protanopia distinguishability; always paired with signs/labels. Info banners moved to slate so blue unambiguously means "positive". (2026-06-11)
 - **Destructive stays clay, and is now a separate token from negative data** (`danger` vs `neg`). Amber-as-danger would collide with over-budget semantics; clay buttons are always labeled so the colorblind concern doesn't apply to them. (2026-06-11)
