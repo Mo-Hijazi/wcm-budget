@@ -14,11 +14,11 @@
   <style>
     @font-face { font-family:'Inter'; src:url('fonts/inter-var.woff2') format('woff2'); font-weight:100 900; font-display:swap; }
     @font-face { font-family:'Newsreader'; src:url('fonts/newsreader-var.woff2') format('woff2'); font-weight:200 800; font-display:swap; }
-    :root { --bg:#101210; --text:#F6EFDD; --dim:rgba(246,239,221,0.62); --faint:rgba(246,239,221,0.42); --amber:#DDA528; --border:rgba(255,255,255,0.12); }
+    :root { --bg:#101210; --text:#F6EFDD; --dim:rgba(246,239,221,0.62); --faint:rgba(246,239,221,0.52); --amber:#DDA528; --border:rgba(255,255,255,0.12); }
     * { box-sizing:border-box; }
     body { margin:0; background:var(--bg); color:var(--text); font-family:'Inter',system-ui,-apple-system,sans-serif; line-height:1.65; -webkit-font-smoothing:antialiased; }
     .wrap { max-width:720px; margin:0 auto; padding:56px 24px 96px; }
-    a { color:var(--amber); text-decoration:none; }
+    a { color:var(--amber); text-decoration:underline; }
     a:hover { text-decoration:underline; }
     .brand { font-family:'Newsreader',Georgia,serif; font-size:26px; font-weight:600; letter-spacing:-0.02em; }
     .brand span { color:var(--amber); }
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <main class="wrap">
     <div class="brand">Marro<span>.</span></div>
     <h1>Terms of Service</h1>
     <div class="updated">Last updated: June 13, 2026</div>
@@ -79,6 +79,6 @@
     <hr/>
     <a class="back" href="/">← Back to Marro</a>
     <footer>See also our <a href="/privacy.html">Privacy Policy</a>.</footer>
-  </div>
+  </main>
 </body>
 </html>

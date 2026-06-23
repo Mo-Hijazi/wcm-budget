@@ -2,6 +2,22 @@
 
 Newest first. One line per finding: severity · what · fix.
 
+## 2026-06-23 (later) — ADA P1 part C: static pages + login screen (no-login-required surfaces)
+
+Method: axe-core 4.10 per-view, login screen scanned in **both themes**, static pages on their solid dark bg. End state: **axe-clean on `/`, `/privacy.html`, `/terms.html` (login both themes)**. These three surfaces are reachable without auth so they could be audited this session; onboarding + signed-in 200%-zoom + VoiceOver still pending (need a logged-in session).
+
+### Static pages (`privacy.html` + `terms.html`, identical CSS)
+- **P1 · `--faint` (Last-updated date + footer, 13px) was 3.66:1 on `#101210`** (fails 4.5:1) → opacity `0.42`→**`0.52`** (≈5.1:1). axe now resolves contrast fully (solid bg), zero violations.
+- **P1 · Inline links amber-only vs body text** (1.4.1; ~1.25:1 against surrounding `--dim`, no rest-state underline) → `a { text-decoration: underline }` by default.
+- **Minor · no landmark** → content region `<div class="wrap">`→`<main class="wrap">`.
+
+### Login screen (`index.html`, `LoginScreen`)
+- **P1 · no heading on the page** → wordmark `<div>`Marro.`</div>`→`<h1 style={{margin:0,…}}>` (1.3.1/2.4.6).
+- **P1 · logo `marroDotPulse` infinite animation not gated by reduced-motion** (2.2.2 — only the boot-ring set was covered) → added `.marro-logo-svg circle { animation: none !important; }` to the reduced-motion block + `className="marro-logo-svg"` on the svg.
+- **Minor · decorative SVGs exposed to AT** → `aria-hidden="true"` on the MarroLogo tile div + the GoogleGlyph svg (button text "Continue with Google" carries the name).
+- **Minor · offline message not announced** → `role="status"` on the "You're offline" div.
+- **Verified-pass (no change):** tagline (`C.gray`) over the `.mm` glass hand-computes to ~6:1 dark / ~5.25:1 light (axe left it "incomplete" — couldn't resolve the blurred-blob backdrop); the global `:focus-visible` ring (line 179) applies to the `<button>`.
+
 ## 2026-06-23 — Full ADA / WCAG 2.1 AA audit + remediation (FUTURE_WORK P1, part A)
 
 Method: axe-core 4.10 run per-view in **both themes** + per-modal, via Chrome MCP on the owner's logged-in session, plus keyboard-close checks. All 7 tabs (Budget/Weekly/Charts/Savings/Aid/Subscriptions/Categories), all reachable modals (Add goal, Log deposit, Add subscription, Import CSV, Add category, Program, Avatar), and the settings popover scanned. End state: **axe-clean across every view in both themes.** (Already-passing before this pass: global `:focus-visible` ring, icon-button `aria-label`s, reduced-motion, `lang`, Modal focus-trap+Esc — left intact.)
