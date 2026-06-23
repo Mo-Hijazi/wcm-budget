@@ -113,7 +113,10 @@
     --glass-modal-border: rgba(255,255,255,0.80);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); transition: background .3s; }
+  /* App-like chrome, not a document: plain text isn't selectable/I-beam by
+     default (mirrors native macOS/iOS apps) — only form fields are. */
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); transition: background .3s; cursor: default; user-select: none; -webkit-user-select: none; }
+  input, textarea, [contenteditable] { cursor: text; user-select: text; -webkit-user-select: text; }
   #root { min-height: 100vh; background: transparent; position: relative; z-index: 1; }
   #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text); }
   /* Boot moment: rings bloom outward in sequence, the marigold dot orbits while we wait */
@@ -182,14 +185,33 @@
   /* Checkboxes/radios pick up the brand tint instead of OS blue */
   input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
 
-  /* Ghost ✕ buttons: invisible chrome until hover — they whisper, never box */
+  /* ── Hover/press affordance system (Apple-style) ─────────────────────────
+     Every button gets a tactile press (depress on tap) — universal, safe
+     (scale never reflows or overrides colors). Hover treatment is layered by
+     button TYPE on top:
+       .shimmer-text → plain nav text (tabs, year pills): glow through glyphs
+       .btn-fill     → filled colored CTAs (Save, Add entry): quiet brighten+lift
+       .btn-pop      → bordered/transparent chrome (Browse weeks, dropdowns): tint+lift
+       .xbtn         → icon-only ghost buttons (✕, chevrons): tint+scale
+       .txt-act      → text links (← Back, Change): opacity lift
+     Apple is restrained — no glow/shimmer on chrome; that's reserved for nav text. */
+  button { transition: transform 140ms cubic-bezier(0.34,1.56,0.64,1), filter 140ms ease; }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  .xbtn, .btn-pop, .btn-fill { transition: transform 140ms cubic-bezier(0.34,1.56,0.64,1), background 140ms ease, color 140ms ease, border-color 140ms ease, filter 140ms ease; }
   @media (hover: hover) and (pointer: fine) {
-    .xbtn:hover { background: var(--input-bg); color: var(--text); }
-    .xbtn-danger:hover { color: var(--xbtn-danger, currentColor); }
+    .xbtn:hover:not(:disabled) { background: var(--input-bg); color: var(--text); transform: scale(1.08); }
+    .xbtn-danger:hover:not(:disabled) { color: var(--xbtn-danger, currentColor); }
     .menu-row:hover { background: var(--input-bg); }
     /* Text-action buttons ("← Back", "Change", "isn't listed →" etc):
        opacity lift + cursor on hover so they read as clickable, not static text. */
-    .txt-act:hover { opacity: 1; }
+    .txt-act:hover:not(:disabled) { opacity: 1; }
+    /* Bordered/transparent chrome buttons (Browse weeks, Import CSV, dropdown
+       triggers) — Apple's toolbar hover is a quiet tint + slight lift. */
+    .btn-pop:hover:not(:disabled) { background: var(--input-bg) !important; border-color: var(--border-strong, var(--text)); transform: scale(1.03); }
+    /* Filled colored CTAs (Save, Add entry, Got it) — never override the fill
+       color; just brighten + lift so it pops without losing its meaning.
+       Disabled CTAs (submit-until-valid) stay inert — no hover reaction. */
+    .btn-fill:hover:not(:disabled) { filter: brightness(1.07); transform: scale(1.02); }
   }
   .txt-act { cursor: pointer; opacity: 0.72; transition: opacity 140ms ease; }
   /* Tab bar: hide scrollbar; on narrow screens fade the right edge to hint more tabs */
@@ -405,19 +427,25 @@
       background-image: linear-gradient(100deg,
         var(--text) 0%, var(--text) 38%, var(--shimmer-glow) 50%, var(--text) 62%, var(--text) 100%) !important;
       background-size: 250% 100% !important; background-repeat: no-repeat !important;
-      background-position: 120% 0; background-origin: padding-box !important;
+      background-position: 100% 0; background-origin: padding-box !important;
       -webkit-background-clip: text !important; background-clip: text !important;
       -webkit-text-fill-color: transparent;
       animation: textShimmer 750ms ease forwards;
     }
   }
   @keyframes textShimmer {
-    from { background-position: 120% 0; }
-    to   { background-position: -130% 0; }
+    /* Bounds matter: at background-size 250%, position must stay within
+       roughly (-67%, 167%) or the gradient box slides fully off the glyphs
+       and they go transparent (no paint = invisible letters). 100%→0% sweeps
+       the gradient's full 0–100% range across the text without ever exiting. */
+    from { background-position: 100% 0; }
+    to   { background-position: 0% 0; }
   }
   /* Respect user motion preferences (Emil Kowalski) */
   @media (prefers-reduced-motion: reduce) {
     .shimmer-text:hover { animation: none !important; background-image: none; -webkit-text-fill-color: var(--text); color: var(--text); }
+    /* No scale/lift motion when reduced-motion is on; keep the color/tint cues. */
+    button:active:not(:disabled), .xbtn:hover, .btn-pop:hover, .btn-fill:hover { transform: none !important; }
     .mc { transition: none; }
     .mc-e { animation: none !important; opacity: 1 !important; transform: none !important; }
     .mc-sh { display: none; }
@@ -1171,7 +1199,7 @@ const MonthPicker = ({value, onChange}) => {
   useLiftCard(open, btnRef);
   return (
     <div style={{position:"relative"}}>
-      <button ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+      <button className="btn-pop" ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
         {MONTH_FULL[value]} <Icon name="chevron" size={11} style={{opacity:0.6,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
       </button>
       {open && <>
@@ -1220,7 +1248,7 @@ const PeriodPicker = ({value, onChange, yearsList}) => {
   const label = value.type==="year" ? yLabel(value.ayId) : `${MONTH_NAMES[value.mi]} · ${yLabel(value.ayId)}`;
   return (
     <div style={{position:"relative"}}>
-      <button ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
+      <button className="btn-pop" ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
         {label} <Icon name="chevron" size={11} style={{opacity:0.6,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
       </button>
       {open && <>
@@ -1277,7 +1305,7 @@ const DateField = ({value, onChange, style={}, ariaLabel="Date"}) => {
   const shown = value ? new Date(value+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "Pick a date";
   return (
     <div style={{position:"relative"}}>
-      <button ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} aria-label={ariaLabel} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:8,width:"100%",fontSize:13,border:`1px solid ${open?C.sel:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:value?C.text:C.gray,cursor:"pointer",boxSizing:"border-box",textAlign:"left",transition:"border-color .15s",...style}}>
+      <button className="btn-pop" ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} aria-label={ariaLabel} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:8,width:"100%",fontSize:13,border:`1px solid ${open?C.sel:C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:value?C.text:C.gray,cursor:"pointer",boxSizing:"border-box",textAlign:"left",transition:"border-color .15s",...style}}>
         <Icon name="calendar" size={14} color={C.gray}/>
         <span style={{flex:1}}>{shown}</span>
       </button>
@@ -1305,7 +1333,7 @@ const DateField = ({value, onChange, style={}, ariaLabel="Date"}) => {
             })}
           </div>
           <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"flex-end"}}>
-            <button onClick={()=>{onChange(todayIso);setOpen(false);}} style={{background:"none",border:"none",color:C.marigold,cursor:"pointer",fontSize:11,fontWeight:600,padding:0}}>Today</button>
+            <button className="txt-act" onClick={()=>{onChange(todayIso);setOpen(false);}} style={{background:"none",border:"none",color:C.marigold,cursor:"pointer",fontSize:11,fontWeight:600,padding:0}}>Today</button>
           </div>
         </div>
       </>)}
@@ -1367,7 +1395,7 @@ const Banner = ({children, type="info", onClose}) => {
   return (
     <div style={{background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:12, color:s.color, display:"flex", gap:10, alignItems:"flex-start", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)"}}>
       <div style={{flex:1, lineHeight:1.6}}>{children}</div>
-      {onClose && <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}><Icon name="close" size={13}/></button>}
+      {onClose && <button className="txt-act" onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}><Icon name="close" size={13}/></button>}
     </div>
   );
 };
@@ -1454,7 +1482,7 @@ const LoginScreen = ({offline}) => (
       <div style={{display:"flex",justifyContent:"center",marginBottom:18}}><MarroLogo size={64}/></div>
       <div style={{fontSize:30,fontWeight:600,color:C.text,letterSpacing:"-0.02em",lineHeight:1.1,fontFamily:"'Newsreader', Georgia, serif"}}>Marro<span style={{color:C.marigold}}>.</span></div>
       <div style={{fontSize:13,color:C.gray,marginTop:8,marginBottom:26,lineHeight:1.5}}>Your medical school budget companion. Sign in to sync across your devices.</div>
-      <button
+      <button className="btn-pop"
         disabled={offline}
         onClick={()=>sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}})}
         style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"12px 16px",borderRadius:10,border:`1px solid ${C.borderDark}`,background:offline?"transparent":C.selBg,color:C.text,fontSize:14,fontWeight:600,cursor:offline?"not-allowed":"pointer",opacity:offline?0.5:1,transition:"all .15s"}}>
@@ -1781,8 +1809,8 @@ const ProgramModal = ({data, upd, school, onClose}) => {
       )}
       <div style={{fontSize:11,color:C.gray,marginTop:14}}>Changing your number of years? Add or remove years in the Aid tab — that keeps your budget data intact.</div>
       <div style={{display:"flex",gap:8,marginTop:16}}>
-        <button onClick={save} style={{flex:1,padding:"11px",fontSize:13.5,fontWeight:600,border:"none",borderRadius:10,background:C.teal,color:C.bg,cursor:"pointer"}}>Save</button>
-        <button onClick={onClose} style={{padding:"11px 16px",fontSize:13.5,border:`1px solid ${C.border}`,borderRadius:10,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
+        <button className="btn-fill" onClick={save} style={{flex:1,padding:"11px",fontSize:13.5,fontWeight:600,border:"none",borderRadius:10,background:C.teal,color:C.bg,cursor:"pointer"}}>Save</button>
+        <button className="btn-pop" onClick={onClose} style={{padding:"11px 16px",fontSize:13.5,border:`1px solid ${C.border}`,borderRadius:10,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
       </div>
     </Modal>
   );
@@ -1829,7 +1857,7 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
       </div>
       {other ? <>
         <input autoFocus value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Type your school's full name" style={inputStyle}/>
-        <button onClick={()=>{setOther(false);setOtherText("");}} style={linkStyle}>← Back to the list</button>
+        <button className="txt-act" onClick={()=>{setOther(false);setOtherText("");}} style={linkStyle}>← Back to the list</button>
       </> : needsCampus ? <>
         <div style={{fontSize:12.5,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
         <div style={{fontSize:12,color:C.gray,marginBottom:8}}>Which campus?</div>
@@ -1839,7 +1867,7 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
               style={{display:"block",width:"100%",textAlign:"left",padding:"9px 12px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>{c}</button>
           ))}
         </div>
-        <button onClick={reset} style={linkStyle}>← Choose a different school</button>
+        <button className="txt-act" onClick={reset} style={linkStyle}>← Choose a different school</button>
       </> : picked ? <>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 12px",borderRadius:10,border:`1px solid ${C.sel}`,background:C.selBg}}>
           <span style={{fontSize:13,color:C.text,fontWeight:600}}>{campus ? `${picked.name} — ${campus}` : picked.name}</span>
@@ -1855,14 +1883,14 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
             ))}
           </div>
         )}
-        <button onClick={()=>{reset();setOther(true);}} style={linkStyle}>My school isn't listed →</button>
+        <button className="txt-act" onClick={()=>{reset();setOther(true);}} style={linkStyle}>My school isn't listed →</button>
       </>}
       {err && <div style={{marginTop:12,fontSize:12,color:C.neg}}>{err}</div>}
-      <button onClick={save} disabled={!canSave}
+      <button className="btn-fill" onClick={save} disabled={!canSave}
         style={{marginTop:err?10:20,width:"100%",padding:"11px 16px",borderRadius:10,border:"none",background:canSave?C.teal:C.border,color:canSave?"#fff":C.gray,fontSize:14,fontWeight:600,cursor:canSave?"pointer":"not-allowed",transition:"all .15s"}}>
         {saving?"Saving…":"Save"}
       </button>
-      {dismissable && <button onClick={onClose} style={{...linkStyle,color:C.gray,display:"block",width:"100%",textAlign:"center",marginTop:10}}>Cancel</button>}
+      {dismissable && <button className="txt-act" onClick={onClose} style={{...linkStyle,color:C.gray,display:"block",width:"100%",textAlign:"center",marginTop:10}}>Cancel</button>}
     </Modal>
   );
 };
@@ -1986,7 +2014,7 @@ const AvatarPicker = ({value, onChange, googlePhoto}) => {
             <img src={googlePhoto} alt="" width={40} height={40} referrerPolicy="no-referrer" style={{borderRadius:"50%",objectFit:"cover",display:"block"}}/>
           </button>
         )}
-        <button onClick={()=>fileRef.current&&fileRef.current.click()}
+        <button className="btn-pop" onClick={()=>fileRef.current&&fileRef.current.click()}
           style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,border:`1px solid ${value&&value.type==="upload"?C.sel:C.border}`,background:value&&value.type==="upload"?C.selBg:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>
           <Icon name="plus" size={13}/>{value&&value.type==="upload"?"Photo added":"Upload photo"}
         </button>
@@ -2028,8 +2056,8 @@ const AvatarModal = ({data, upd, user, onClose}) => {
   return (
     <Modal title="Your avatar" onClose={onClose} width={420}>
       <AvatarPicker value={avatar} onChange={setAvatar} googlePhoto={googlePhoto}/>
-      <button onClick={save} style={{marginTop:18,width:"100%",padding:"11px 16px",borderRadius:10,border:"none",background:C.teal,color:C.bg,fontSize:14,fontWeight:600,cursor:"pointer"}}>Save</button>
-      <button onClick={onClose} style={{marginTop:10,display:"block",width:"100%",textAlign:"center",border:"none",background:"transparent",color:C.textMid,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+      <button className="btn-fill" onClick={save} style={{marginTop:18,width:"100%",padding:"11px 16px",borderRadius:10,border:"none",background:C.teal,color:C.bg,fontSize:14,fontWeight:600,cursor:"pointer"}}>Save</button>
+      <button className="txt-act" onClick={onClose} style={{marginTop:10,display:"block",width:"100%",textAlign:"center",border:"none",background:"transparent",color:C.textMid,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
     </Modal>
   );
 };
@@ -2205,7 +2233,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
   return (
     <div role="dialog" aria-modal="true" aria-label="Welcome to Marro" style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:C.scrim,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)"}}>
       <div className="mm" style={{position:"relative",width:"100%",maxWidth:420,padding:"36px 30px 30px",overflow:"hidden"}}>
-        {onCancel && step!==5 && <button onClick={onCancel} aria-label="Close setup" style={{position:"absolute",top:12,right:12,zIndex:2,width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontSize:14,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>}
+        {onCancel && step!==5 && <button className="xbtn" onClick={onCancel} aria-label="Close setup" style={{position:"absolute",top:12,right:12,zIndex:2,width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontSize:14,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>}
         {/* progress dots */}
         {step>=1 && step<=4 && (
           <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:26}}>
@@ -2253,7 +2281,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
               <div style={{marginTop:20}}>
                 {other ? <>
                   <input autoFocus value={otherText} onChange={e=>setOtherText(e.target.value)} placeholder="Type your school's full name" style={input}/>
-                  <button onClick={()=>{setOther(false);setOtherText("");}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Back to the list</button>
+                  <button className="txt-act" onClick={()=>{setOther(false);setOtherText("");}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Back to the list</button>
                 </> : needsCampus ? <>
                   <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
                   <div style={{fontSize:12,color:C.textMid,marginBottom:8}}>Which campus?</div>
@@ -2262,7 +2290,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
                       <button key={c} role="option" className="menu-row" onClick={()=>setCampus(c)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{c}</button>
                     ))}
                   </div>
-                  <button onClick={resetSchool} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Choose a different school</button>
+                  <button className="txt-act" onClick={resetSchool} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Choose a different school</button>
                 </> : picked ? <>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.sel}`,background:C.selBg}}>
                     <span style={{fontSize:13.5,color:C.text,fontWeight:600}}>{campus?`${picked.name} — ${campus}`:picked.name}</span>
@@ -2277,7 +2305,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
                       ))}
                     </div>
                   )}
-                  <button onClick={()=>{resetSchool();setOther(true);}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>My school isn't listed →</button>
+                  <button className="txt-act" onClick={()=>{resetSchool();setOther(true);}} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>My school isn't listed →</button>
                 </>}
               </div>
               <button className="ob-cta" style={{...ctaPrimary(!!school),marginTop:20}} disabled={!school} onClick={()=>setStep(4)}>Continue</button>
@@ -2555,7 +2583,7 @@ function RenewalDialog({sub, onClose, onConfirm}) {
       </>}
       {renewed===false && <Banner type="warn" style={{marginBottom:16}}>This subscription will be removed and your budget updated automatically.</Banner>}
       {renewed !== null && (
-        <button onClick={()=>onConfirm(sub,renewed,samePrice?sub.amount:newAmt,newDate)} style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,border:"none",borderRadius:8,background:renewed?C.teal:C.danger,color:C.bg,cursor:"pointer"}}>
+        <button className="btn-fill" onClick={()=>onConfirm(sub,renewed,samePrice?sub.amount:newAmt,newDate)} style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,border:"none",borderRadius:8,background:renewed?C.teal:C.danger,color:C.bg,cursor:"pointer"}}>
           {renewed ? "Save subscription" : "Remove subscription"}
         </button>
       )}
@@ -2622,7 +2650,7 @@ function ConflictModal({pending, data, onResolve}) {
         {autoCount>0&&<div style={{fontSize:11,color:C.gray,marginBottom:14,padding:'8px 12px',borderRadius:8,background:C.surface,border:`1px solid ${C.border}`}}>
           {autoCount} other change{autoCount>1?'s':''} on different items will be merged automatically — no action needed.
         </div>}
-        <button onClick={resolve} style={{width:'100%',padding:'12px',fontSize:14,fontWeight:700,border:'none',borderRadius:8,background:C.teal,color:'#fff',cursor:'pointer',marginTop:4}}>
+        <button className="btn-fill" onClick={resolve} style={{width:'100%',padding:'12px',fontSize:14,fontWeight:700,border:'none',borderRadius:8,background:C.teal,color:'#fff',cursor:'pointer',marginTop:4}}>
           Apply &amp; sync
         </button>
       </div>
@@ -3421,20 +3449,20 @@ function App() {
         <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.6}}>
           {weeklyNotice.month} is now <strong style={{color:C.neg}}>{fmt(weeklyNotice.deficit)}</strong> over your monthly income{weeklyNotice.cat?<>, after logging <strong>{weeklyNotice.cat}</strong></>:""}. This lowers your running balance and year-end net. Consider trimming a category or adjusting your budget.
         </div>
-        <button onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.neg,color:C.bg,cursor:"pointer"}}>Got it</button>
+        <button className="btn-fill" onClick={()=>setWeeklyNotice(null)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.neg,color:C.bg,cursor:"pointer"}}>Got it</button>
       </Modal>}
       {confirmReset && <Modal title="Reset everything?" onClose={()=>setConfirmReset(false)} width={350}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.6}}>This replaces <strong>all</strong> of your budget, weekly entries, savings, and subscriptions with the starting defaults. This cannot be undone.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirmReset(false)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
-          <button onClick={()=>{upd(JSON.parse(JSON.stringify(DEFAULT_STATE)));setConfirmReset(false);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Reset everything</button>
+          <button className="btn-fill" onClick={()=>setConfirmReset(false)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
+          <button className="btn-fill" onClick={()=>{upd(JSON.parse(JSON.stringify(DEFAULT_STATE)));setConfirmReset(false);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Reset everything</button>
         </div>
       </Modal>}
       {confirmYearRemove!==null && <Modal title="Remove year" onClose={()=>setConfirmYearRemove(null)} width={350}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{data.years.find(y=>y.id===confirmYearRemove)?.label}</strong>? This permanently deletes its budget data and cannot be undone.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirmYearRemove(null)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
-          <button onClick={()=>{removeYear(confirmYearRemove);setConfirmYearRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Remove</button>
+          <button className="btn-fill" onClick={()=>setConfirmYearRemove(null)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
+          <button className="btn-fill" onClick={()=>{removeYear(confirmYearRemove);setConfirmYearRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Remove</button>
         </div>
       </Modal>}
       {showAddYear && <Modal title="Add academic year" onClose={()=>setShowAddYear(false)} width={360}>
@@ -3447,13 +3475,13 @@ function App() {
           <div style={{fontSize:11,fontWeight:600,color:C.textMid,marginBottom:4}}>End date</div>
           <DateField value={nyEnd} onChange={setNyEnd} ariaLabel="Year end date"/>
         </div>
-        <button onClick={()=>addYear(nyStart,nyEnd)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.teal,color:C.bg,cursor:"pointer"}}>Add year</button>
+        <button className="btn-fill" onClick={()=>addYear(nyStart,nyEnd)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.teal,color:C.bg,cursor:"pointer"}}>Add year</button>
       </Modal>}
       {confirmRemove && <Modal title="Remove category" onClose={()=>setConfirmRemove(null)} width={340}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{cats.find(c=>c.id===confirmRemove)?.label}</strong> from {MONTH_FULL[selMonth]}? You can add it back anytime.</div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{toggleMonthCat(confirmRemove);setConfirmRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.danger,color:C.bg,cursor:"pointer"}}>Remove</button>
-          <button onClick={()=>setConfirmRemove(null)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:500,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
+          <button className="btn-fill" onClick={()=>{toggleMonthCat(confirmRemove);setConfirmRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.danger,color:C.bg,cursor:"pointer"}}>Remove</button>
+          <button className="btn-pop" onClick={()=>setConfirmRemove(null)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:500,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer"}}>Cancel</button>
         </div>
       </Modal>}
       {showAddCat && <Modal title={"Add category — "+MONTH_FULL[selMonth]} onClose={()=>setShowAddCat(false)} width={380}>
@@ -3466,11 +3494,11 @@ function App() {
         <div style={{fontSize:12,fontWeight:600,color:C.textMid,marginBottom:8}}>Create new category</div>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <div style={{display:"flex",gap:8}}>
-            <button type="button" onClick={()=>setIconPickOpen(o=>!o)} title="Choose icon" aria-expanded={iconPickOpen} style={{width:36,height:36,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${iconPickOpen?C.sel:C.border}`,background:iconPickOpen?C.selBg:"transparent",color:C.text,cursor:"pointer",transition:"all .15s"}}>
+            <button className="btn-pop" type="button" onClick={()=>setIconPickOpen(o=>!o)} title="Choose icon" aria-expanded={iconPickOpen} style={{width:36,height:36,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${iconPickOpen?C.sel:C.border}`,background:iconPickOpen?C.selBg:"transparent",color:C.text,cursor:"pointer",transition:"all .15s"}}>
               <Icon name={newCatIcon} size={16} strokeWidth={1.5}/>
             </button>
             <input placeholder="Category name" value={newCatName} onChange={e=>setNewCatName(e.target.value)} style={{flex:1,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",background:C.bg,color:C.text}}/>
-            <button onClick={()=>{if(newCatName.trim()){addCat();setShowAddCat(false);setIconPickOpen(false);}}} disabled={!newCatName.trim()} style={{padding:"8px 16px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!newCatName.trim()?C.surface:C.teal,color:!newCatName.trim()?C.gray:C.bg,cursor:!newCatName.trim()?"not-allowed":"pointer"}}>Add</button>
+            <button className="btn-fill" onClick={()=>{if(newCatName.trim()){addCat();setShowAddCat(false);setIconPickOpen(false);}}} disabled={!newCatName.trim()} style={{padding:"8px 16px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!newCatName.trim()?C.surface:C.teal,color:!newCatName.trim()?C.gray:C.bg,cursor:!newCatName.trim()?"not-allowed":"pointer"}}>Add</button>
           </div>
           {iconPickOpen && <CatIconPicker value={newCatIcon} onChange={v=>{setNewCatIcon(v);setIconPickOpen(false);}}/>}
         </div>
@@ -3495,7 +3523,7 @@ function App() {
                 <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Note (optional)</div>
                 <input type="text" placeholder="e.g. August savings" value={savingsDepositNote} onChange={e=>setSavingsDepositNote(e.target.value)} style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
               </div>
-              <button onClick={()=>{
+              <button className="btn-fill" onClick={()=>{
                 const amt=parseFloat(savingsDepositAmt)||0;
                 if(!amt) return;
                 const d=JSON.parse(JSON.stringify(data));
@@ -3587,7 +3615,7 @@ function App() {
               <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Target date (optional)</div>
               <DateField value={newGoalDate} onChange={setNewGoalDate} ariaLabel="Goal target date"/>
             </div>
-            <button onClick={()=>{
+            <button className="btn-fill" onClick={()=>{
               if(!newGoalLabel.trim()||!newGoalTarget) return;
               const d=JSON.parse(JSON.stringify(data));
               d.savingsGoals.push({id:"sg_"+Date.now(),label:newGoalLabel.trim(),targetAmount:parseFloat(newGoalTarget)||0,saved:0,monthlyContribution:parseFloat(newGoalMonthly)||0,targetDate:newGoalDate});
@@ -3715,13 +3743,13 @@ function App() {
                 </div>
                 <textarea value={csvText} onChange={e=>{setCsvText(e.target.value);setCsvError(null);}} placeholder={"Date,Description,Amount\n06/01/2026,GRUBHUB,-12.50\n06/02/2026,MTA TRANSIT,-2.90"} rows={10} style={{width:"100%",fontSize:12,border:`1px solid ${csvError?C.negMid:C.border}`,borderRadius:8,padding:"10px",background:C.bg,color:C.text,boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>
                 {csvError && <div role="alert" style={{fontSize:12,lineHeight:1.5,color:C.danger,background:C.dangerLight,border:`1px solid ${C.dangerMid}`,borderRadius:8,padding:"8px 12px"}}>{csvError}</div>}
-                <button onClick={parseCSV} disabled={!csvText.trim()} style={{padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!csvText.trim()?C.surface:C.teal,color:!csvText.trim()?C.gray:C.bg,cursor:!csvText.trim()?"not-allowed":"pointer"}}>Parse transactions</button>
+                <button className="btn-fill" onClick={parseCSV} disabled={!csvText.trim()} style={{padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!csvText.trim()?C.surface:C.teal,color:!csvText.trim()?C.gray:C.bg,cursor:!csvText.trim()?"not-allowed":"pointer"}}>Parse transactions</button>
               </div>
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:12,color:C.gray}}>{csvRows.length} {csvRows.length===1?"transaction":"transactions"} found — review categories and uncheck any to skip</span>
-                  <button onClick={()=>setCsvRows(null)} style={{background:"none",border:"none",color:C.gray,cursor:"pointer",fontSize:12}}>← Paste again</button>
+                  <button className="txt-act" onClick={()=>setCsvRows(null)} style={{background:"none",border:"none",color:C.gray,cursor:"pointer",fontSize:12}}>← Paste again</button>
                 </div>
                 <div style={{maxHeight:360,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -3756,7 +3784,7 @@ function App() {
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:12,color:C.gray}}>{total} entries will be imported</span>
-                  <button onClick={doImport} disabled={total===0} style={{padding:"10px 24px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:total===0?C.surface:C.teal,color:total===0?C.gray:C.bg,cursor:total===0?"not-allowed":"pointer"}}>
+                  <button className="btn-fill" onClick={doImport} disabled={total===0} style={{padding:"10px 24px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:total===0?C.surface:C.teal,color:total===0?C.gray:C.bg,cursor:total===0?"not-allowed":"pointer"}}>
                     Import {total} {total===1?"entry":"entries"}
                   </button>
                 </div>
@@ -3804,7 +3832,7 @@ function App() {
             {flash && <span style={{fontSize:12,color:C.teal,fontWeight:600}}>Saved</span>}
             {/* Settings menu */}
             <div style={{position:"relative"}}>
-              <button onClick={()=>setSettingsOpen(o=>!o)} aria-label="Settings" aria-haspopup="true" aria-expanded={settingsOpen} title="Settings" style={{width:32,height:32,borderRadius:8,border:`1px solid ${settingsOpen?C.sel:C.border}`,background:settingsOpen?C.selBg:"transparent",cursor:"pointer",color:C.textMid,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+              <button className="btn-pop" onClick={()=>setSettingsOpen(o=>!o)} aria-label="Settings" aria-haspopup="true" aria-expanded={settingsOpen} title="Settings" style={{width:32,height:32,borderRadius:8,border:`1px solid ${settingsOpen?C.sel:C.border}`,background:settingsOpen?C.selBg:"transparent",cursor:"pointer",color:C.textMid,display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
                 <Icon name="settings" size={15}/>
               </button>
               {settingsOpen && <>
@@ -3820,11 +3848,11 @@ function App() {
                         {editName ? (
                           <form onSubmit={e=>{e.preventDefault();const val=e.target.elements.n.value.trim();const d=JSON.parse(JSON.stringify(data));d.preferredName=val||null;upd(d);setEditName(false);}} style={{display:"flex",gap:4,alignItems:"center"}}>
                             <input name="n" autoFocus defaultValue={data.preferredName||""} placeholder="Your first name" style={{flex:1,minWidth:0,fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${C.sel}`,background:C.selBg,color:C.text,outline:"none"}}/>
-                            <button type="submit" style={{border:"none",background:"transparent",color:C.teal,fontSize:11,cursor:"pointer",fontWeight:600,padding:"2px 4px"}}>Save</button>
-                            <button type="button" onClick={()=>setEditName(false)} style={{border:"none",background:"transparent",color:C.gray,fontSize:11,cursor:"pointer",padding:"2px 4px"}}>✕</button>
+                            <button className="txt-act" type="submit" style={{border:"none",background:"transparent",color:C.teal,fontSize:11,cursor:"pointer",fontWeight:600,padding:"2px 4px"}}>Save</button>
+                            <button className="xbtn" type="button" onClick={()=>setEditName(false)} style={{border:"none",background:"transparent",color:C.gray,fontSize:11,cursor:"pointer",padding:"2px 4px"}}>✕</button>
                           </form>
                         ) : (
-                          <button onClick={()=>setEditName(true)} style={{display:"flex",alignItems:"center",gap:4,border:"none",background:"transparent",cursor:"pointer",padding:0}}>
+                          <button className="txt-act" onClick={()=>setEditName(true)} style={{display:"flex",alignItems:"center",gap:4,border:"none",background:"transparent",cursor:"pointer",padding:0}}>
                             <span style={{fontSize:12,fontWeight:600,color:C.text}}>{data.preferredName||"Set your name"}</span>
                             <span style={{fontSize:10,color:C.teal}}>✎</span>
                           </button>
@@ -3905,7 +3933,7 @@ function App() {
       {renewalsDue.map(s=>(
         <Banner key={s.id} type="warn" onClose={()=>{let d=JSON.parse(JSON.stringify(data));d.subscriptions=d.subscriptions.map(x=>x.id===s.id?{...x,renewalPrompted:true}:x);upd(d);}}>
           <strong>{s.name}</strong> renewal date has passed.{" "}
-          <button onClick={()=>setRenewDlg(s)} style={{background:C.amber,color:"#fff",border:"none",borderRadius:8,padding:"2px 10px",cursor:"pointer",fontSize:11,fontWeight:600,marginLeft:6}}>Handle renewal</button>
+          <button className="btn-fill" onClick={()=>setRenewDlg(s)} style={{background:C.amber,color:"#fff",border:"none",borderRadius:8,padding:"2px 10px",cursor:"pointer",fontSize:11,fontWeight:600,marginLeft:6}}>Handle renewal</button>
         </Banner>
       ))}
       {renewalsSoon.filter(s=>!dismissed["rsu_"+s.id]).map(s=>(
@@ -4010,7 +4038,7 @@ function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,fontWeight:700}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span>Total</span>
-<button onClick={()=>setShowAddCat(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
+<button className="btn-pop" onClick={()=>setShowAddCat(true)} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:13,lineHeight:1}}>+</span> Add category
                 </button>
               </div>
@@ -4030,7 +4058,7 @@ function App() {
                     <div style={{width:6,height:6,borderRadius:99,background:C.amber,flexShrink:0}}/>
                     <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                     <span style={{fontSize:13,fontWeight:600,color:C.amber,minWidth:64,textAlign:"right"}}>{fmt(spent)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> spent</span></span>
-                    <button onClick={()=>promoteToBudget(cat.id)} style={{padding:"3px 10px",fontSize:11,fontWeight:600,border:`1px solid ${C.amberMid}`,borderRadius:8,background:C.amberLight,color:C.amber,cursor:"pointer",whiteSpace:"nowrap"}}>Add to budget</button>
+                    <button className="btn-fill" onClick={()=>promoteToBudget(cat.id)} style={{padding:"3px 10px",fontSize:11,fontWeight:600,border:`1px solid ${C.amberMid}`,borderRadius:8,background:C.amberLight,color:C.amber,cursor:"pointer",whiteSpace:"nowrap"}}>Add to budget</button>
                   </div>
                 );
               })}
@@ -4137,10 +4165,10 @@ function App() {
               <span style={{fontSize:10,fontWeight:600,color:C.gray,textTransform:"uppercase",letterSpacing:"0.08em",whiteSpace:"nowrap"}}>{viewWeek?"Archived week":"This week"}</span>
               <span style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:"-0.01em",fontFamily:"'Newsreader',Georgia,serif",whiteSpace:"nowrap"}}>{fmtWeekLabel(viewWeek||currentWeekStart)}</span>
             </div>
-            <button onClick={()=>setShowWeekPicker(true)} className="shimmer-text" style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
+            <button onClick={()=>setShowWeekPicker(true)} className="btn-pop" style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.gray,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
               Browse weeks {archives.length>0&&`(${archives.length} archived)`}
             </button>
-            {viewWeek && <button onClick={()=>setViewWeek(null)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${C.sel}`,background:C.selBg,cursor:"pointer",fontSize:12,color:C.text,fontWeight:600}}>← Back to current week</button>}
+            {viewWeek && <button className="btn-pop" onClick={()=>setViewWeek(null)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${C.sel}`,background:C.selBg,cursor:"pointer",fontSize:12,color:C.text,fontWeight:600}}>← Back to current week</button>}
           </div>
 
           {/* Week metrics */}
@@ -4189,10 +4217,10 @@ function App() {
                   <input type="text" placeholder="e.g. Trader Joe's" value={wNote} onChange={e=>setWNote(e.target.value)}
                     style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
                 </div>
-                <button onClick={addEntry} disabled={!wCat||!wAmt} style={{padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!wCat||!wAmt)?C.surface:C.teal,color:(!wCat||!wAmt)?C.gray:C.bg,cursor:(!wCat||!wAmt)?"not-allowed":"pointer",marginTop:2,transition:"all .15s"}}>
+                <button className="btn-fill" onClick={addEntry} disabled={!wCat||!wAmt} style={{padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!wCat||!wAmt)?C.surface:C.teal,color:(!wCat||!wAmt)?C.gray:C.bg,cursor:(!wCat||!wAmt)?"not-allowed":"pointer",marginTop:2,transition:"all .15s"}}>
                   Add entry
                 </button>
-                <button onClick={()=>{setShowCsvImport(true);setCsvText("");setCsvRows(null);}} className="shimmer-text" style={{padding:"7px",fontSize:12,fontWeight:500,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer",marginTop:2}}>
+                <button onClick={()=>{setShowCsvImport(true);setCsvText("");setCsvRows(null);}} className="btn-pop" style={{padding:"7px",fontSize:12,fontWeight:500,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",color:C.gray,cursor:"pointer",marginTop:2}}>
                   Import from bank CSV
                 </button>
               </div>
@@ -4431,7 +4459,7 @@ function App() {
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <SectionTitle style={{margin:0}}>Planned breakdown</SectionTitle>
                     <div style={{position:"relative"}}>
-                      <button onClick={()=>setPiePickerOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:isRange?C.teal+"22":"transparent",color:isRange?C.teal:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      <button className="btn-pop" onClick={()=>setPiePickerOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:isRange?C.teal+"22":"transparent",color:isRange?C.teal:C.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                         {pieLabel} <Icon name="chevron" size={11} style={{opacity:0.6}}/>
                       </button>
                       {piePickerOpen && <>
@@ -4461,7 +4489,7 @@ function App() {
                             })}
                           </div>
                           <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <button onClick={()=>{setPieMonthStart((new Date().getMonth()-7+12)%12);setPieMonthEnd(null);setPiePickerOpen(false);}} style={{background:"none",border:"none",color:C.gray,cursor:"pointer",fontSize:11,padding:0}}>Reset</button>
+                            <button className="txt-act" onClick={()=>{setPieMonthStart((new Date().getMonth()-7+12)%12);setPieMonthEnd(null);setPiePickerOpen(false);}} style={{background:"none",border:"none",color:C.gray,cursor:"pointer",fontSize:11,padding:0}}>Reset</button>
                             {pieMonthEnd===null && <span style={{fontSize:10,color:C.gray}}>Click another for range</span>}
                           </div>
                         </div>
@@ -4728,7 +4756,7 @@ function App() {
                   <div style={{flex:1,color:C.teal,lineHeight:1.6}}>
                     Your USMLE/Exams budget has <strong>{fmt(examBudget)}/mo</strong> allocated.
                     Apply {unfunded.length>1?`${fmt(suggested)}/mo to each unfunded goal`:`it to ${unfunded[0].label}`} to track progress here.
-                    <button onClick={()=>{
+                    <button className="btn-fill" onClick={()=>{
                       const d=JSON.parse(JSON.stringify(data));
                       unfunded.forEach(g=>{
                         const i=d.stepGoals.findIndex(x=>x.id===g.id);
@@ -4798,7 +4826,7 @@ function App() {
                         <span style={{color:C.gray,marginLeft:8}}>Target:</span>
                         <input type="number" value={g.targetAmount} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
                       </div>
-                      {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
+                      {!funded&&<button className="btn-fill" onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
                     </div>
                   </div>
                 );
@@ -4842,7 +4870,7 @@ function App() {
           <Card>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <SectionTitle>Custom Goals</SectionTitle>
-              <button onClick={()=>setShowAddSavingsGoal(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>+ Add goal</button>
+              <button className="btn-pop" onClick={()=>setShowAddSavingsGoal(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontWeight:500}}>+ Add goal</button>
             </div>
             {(data.savingsGoals||[]).length===0
               ?<EmptyState>No custom goals yet — add one above.</EmptyState>
@@ -4858,7 +4886,7 @@ function App() {
                       <span style={{display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:13,color:C.text}}><RingProgress value={g.saved||0} max={g.targetAmount} size={34} color={funded?C.green:CHART_COLORS[(gi+2)%CHART_COLORS.length]}/>{g.label}</span>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <Pill ok={funded} warn={!funded&&pct<50}>{pct}%</Pill>
-                        {!funded&&<button onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
+                        {!funded&&<button className="btn-fill" onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>+</button>}
                         <XBtn label={"Delete goal "+g.label} danger onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.savingsGoals=d.savingsGoals.filter(x=>x.id!==g.id);upd(d);}}/>
                       </div>
                     </div>
@@ -5159,10 +5187,10 @@ function App() {
                   <DateField value={subRenew} onChange={setSubRenew} ariaLabel="Next renewal date"/>
                 </div>
                 <div style={{display:"flex",gap:8,marginTop:2}}>
-                  <button onClick={saveSub} disabled={!subName.trim()||!(parseFloat(subAmt)>0)} style={{flex:1,padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!subName.trim()||!(parseFloat(subAmt)>0))?C.surface:C.teal,color:(!subName.trim()||!(parseFloat(subAmt)>0))?C.gray:C.bg,cursor:(!subName.trim()||!(parseFloat(subAmt)>0))?"not-allowed":"pointer"}}>
+                  <button className="btn-fill" onClick={saveSub} disabled={!subName.trim()||!(parseFloat(subAmt)>0)} style={{flex:1,padding:"9px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:(!subName.trim()||!(parseFloat(subAmt)>0))?C.surface:C.teal,color:(!subName.trim()||!(parseFloat(subAmt)>0))?C.gray:C.bg,cursor:(!subName.trim()||!(parseFloat(subAmt)>0))?"not-allowed":"pointer"}}>
                     {subEdit?"Save changes":"Add subscription"}
                   </button>
-                  {subEdit && <button onClick={()=>{setSubEdit(null);setSubName("");setSubAmt("");setSubCycle("monthly");setSubRenew("");}} style={{padding:"9px 14px",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer",color:C.gray}}>Cancel</button>}
+                  {subEdit && <button className="btn-pop" onClick={()=>{setSubEdit(null);setSubName("");setSubAmt("");setSubCycle("monthly");setSubRenew("");}} style={{padding:"9px 14px",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer",color:C.gray}}>Cancel</button>}
                 </div>
               </div>
             </Card>
@@ -5224,9 +5252,9 @@ function App() {
                       </div>
                       {due && <Pill warn sm>Overdue</Pill>}
                       {soon && <Pill warn sm>{d}d</Pill>}
-                      {due && <button onClick={()=>setRenewDlg(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.amber,color:"#fff",cursor:"pointer",fontWeight:600}}>Handle</button>}
-                      <button onClick={()=>editSub(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",color:C.gray}}>Edit</button>
-                      <button onClick={()=>delSub(s.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,cursor:"pointer",color:C.danger,fontWeight:600}}>Delete</button>
+                      {due && <button className="btn-fill" onClick={()=>setRenewDlg(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:"none",background:C.amber,color:"#fff",cursor:"pointer",fontWeight:600}}>Handle</button>}
+                      <button className="btn-pop" onClick={()=>editSub(s)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",color:C.gray}}>Edit</button>
+                      <button className="btn-fill" onClick={()=>delSub(s.id)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,cursor:"pointer",color:C.danger,fontWeight:600}}>Delete</button>
                     </div>
                   );
                 })
@@ -5246,7 +5274,7 @@ function App() {
               <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
                 {/* Icon is editable after creation — click to swap */}
                 <div style={{position:"relative",flexShrink:0}}>
-                  <button type="button" onClick={()=>setEditIconCat(editIconCat===cat.id?null:cat.id)} aria-label={"Change icon for "+cat.label} title="Change icon" style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"inline-flex",borderRadius:8}}>
+                  <button className="xbtn" type="button" onClick={()=>setEditIconCat(editIconCat===cat.id?null:cat.id)} aria-label={"Change icon for "+cat.label} title="Change icon" style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"inline-flex",borderRadius:8}}>
                     <CatIcon name={cat.icon||cat.id} color={CHART_COLORS[cats.findIndex(c=>c.id===cat.id)%CHART_COLORS.length]}/>
                   </button>
                   {editIconCat===cat.id && <>
@@ -5259,17 +5287,17 @@ function App() {
                 <span style={{flex:1,fontSize:13,color:C.text}}>{cat.label}</span>
                 {cat.locked && <span style={{fontSize:11,color:C.gray,background:C.surface,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:8}}>Fixed</span>}
                 {cat.autoCalc && <span style={{fontSize:11,color:C.blue,background:C.blueLight,padding:"2px 8px",borderRadius:8}}>Auto</span>}
-                {!cat.locked && !cat.autoCalc && <button onClick={()=>delCat(cat.id)} style={{fontSize:11,padding:"3px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer",fontWeight:500}}>Remove</button>}
+                {!cat.locked && !cat.autoCalc && <button className="btn-fill" onClick={()=>delCat(cat.id)} style={{fontSize:11,padding:"3px 10px",borderRadius:8,border:`1px solid ${C.dangerMid}`,background:C.dangerLight,color:C.danger,cursor:"pointer",fontWeight:500}}>Remove</button>}
               </div>
             ))}
             <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:10}}>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button type="button" onClick={()=>setIconPickOpen(o=>!o)} title="Choose icon" aria-expanded={iconPickOpen} style={{width:36,height:36,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${iconPickOpen?C.sel:C.border}`,background:iconPickOpen?C.selBg:"transparent",color:C.text,cursor:"pointer",transition:"all .15s"}}>
+                <button className="btn-pop" type="button" onClick={()=>setIconPickOpen(o=>!o)} title="Choose icon" aria-expanded={iconPickOpen} style={{width:36,height:36,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${iconPickOpen?C.sel:C.border}`,background:iconPickOpen?C.selBg:"transparent",color:C.text,cursor:"pointer",transition:"all .15s"}}>
                   <Icon name={newCatIcon} size={16} strokeWidth={1.5}/>
                 </button>
                 <input placeholder="New category name" value={newCatName} onChange={e=>setNewCatName(e.target.value)}
                   style={{flex:1,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg}}/>
-                <button onClick={()=>{addCat();setIconPickOpen(false);}} disabled={!newCatName.trim()} style={{padding:"8px 18px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!newCatName.trim()?C.surface:C.teal,color:!newCatName.trim()?C.gray:C.bg,cursor:!newCatName.trim()?"not-allowed":"pointer"}}>Add</button>
+                <button className="btn-fill" onClick={()=>{addCat();setIconPickOpen(false);}} disabled={!newCatName.trim()} style={{padding:"8px 18px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:!newCatName.trim()?C.surface:C.teal,color:!newCatName.trim()?C.gray:C.bg,cursor:!newCatName.trim()?"not-allowed":"pointer"}}>Add</button>
               </div>
               {iconPickOpen && <CatIconPicker value={newCatIcon} onChange={v=>{setNewCatIcon(v);setIconPickOpen(false);}}/>}
             </div>
