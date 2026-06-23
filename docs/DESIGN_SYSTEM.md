@@ -26,12 +26,12 @@ Neutral warm canvas under liquid glass — near-black dark theme, warm off-white
 |---|---|---|---|
 | `bg` | `#101210` | `#ECEAE2` | App bg; also text on filled buttons |
 | `text` | `#F6EFDD` cream | `#26251E` ink | Primary text |
-| `gray` | cream @ .52 | ink @ .55 | Muted text (min legible alpha per theme) |
-| `teal`/`green` (pos) | `#82AEDB` blue | `#33689E` | Positive, surplus, additive actions |
+| `gray` | cream @ .63 | ink @ .68 | Muted text (alpha tuned for AA 4.5:1 per theme — June 23) |
+| `teal`/`green` (pos) | `#82AEDB` blue | `#2F6196` | Positive, surplus, additive actions |
 | `neg` | `#E5A23E` amber | `#9C6A00` | **Negative data only**: over-budget, deficits, actual-vs-plan series |
-| `danger` | `#E08A6B` clay | `#B05A38` | **Destructive only**: delete, reset, errors. Never data |
-| `blue` (info) | `#9FB0BC` slate | `#5C7282` | Info banners/chips |
-| `amber`/`marigold` | `#DDA528` | `#A87B12` | Wins, milestones, brand dot. Never general chrome |
+| `danger` | `#E08A6B` clay | `#964B2E` | **Destructive only**: delete, reset, errors. Never data |
+| `blue` (info) | `#9FB0BC` slate | `#4F6373` | Info banners/chips |
+| `amber`/`marigold` | `#DDA528` | `#7A5A0D` | Wins, milestones, brand dot. Never general chrome |
 | `sel` / `selBg` | cream .75 / .14 | ink .55 / .08 | Selection/active states |
 | `scrim` | black .65 | ink .35 | Modal overlays |
 

@@ -2,6 +2,36 @@
 
 Newest first. One line per finding: severity · what · fix.
 
+## 2026-06-23 — Full ADA / WCAG 2.1 AA audit + remediation (FUTURE_WORK P1, part A)
+
+Method: axe-core 4.10 run per-view in **both themes** + per-modal, via Chrome MCP on the owner's logged-in session, plus keyboard-close checks. All 7 tabs (Budget/Weekly/Charts/Savings/Aid/Subscriptions/Categories), all reachable modals (Add goal, Log deposit, Add subscription, Import CSV, Add category, Program, Avatar), and the settings popover scanned. End state: **axe-clean across every view in both themes.** (Already-passing before this pass: global `:focus-visible` ring, icon-button `aria-label`s, reduced-motion, `lang`, Modal focus-trap+Esc — left intact.)
+
+### Perceivable — contrast (both themes audited; tokens are theme-split)
+- **P1 · Light muted text failed 4.5:1** — `gray`/`tabMuted` 0.55→**0.68**, `--text-dim`/`--text-faint` bumped; secondary labels/inactive tabs now ≥4.9:1.
+- **P1 · Light positive-blue** (`teal`/`green` `#33689E`) was 4.49:1 on glass cards → **`#2F6196`**.
+- **P1 · Light steel-blue "Auto" badge** (`blue` `#5C7282`) 3.92:1 → **`#4F6373`**.
+- **P1 · Light "Remove"/danger text** (`danger` `#B05A38`) 3.64:1 → **`#964B2E`**.
+- **P1 · Light gold milestone/warning** (`amber`/`purple`/`marigold` `#A87B12`) 2.7:1 on amber chips → **`#7A5A0D`**.
+- **P1 · Light-theme modal labels** illegible (3.78:1) because the `.mm` glass panel was `rgba(255,255,255,0.22)` — too translucent → **0.45** (more opaque, still glass; the one change that touches the tuned Liquid Glass look).
+- **P1 · Dark modal "Cancel"/secondary text** 4.27:1 on the cream-tinted translucent `.mm` panel — dark `gray` 0.58→**0.63** (panel is a light tint so opacifying it would *worsen* light-text contrast; fixed on the text side, kept distinct from `textMid` 0.65).
+
+### Perceivable — non-text / charts
+- **P1 · Recharts bar/pie segments** exposed 17 nameless `role="img"` paths per chart-heavy view (svg-img-alt) → effect marks every `.recharts-surface` `aria-hidden` + neutralizes the `tabindex="0"` pie layer (fixes companion aria-hidden-focus). Charts are decorative-redundant (figures shown as text + visible titles).
+
+### Operable — keyboard
+- **P1 · Popovers had no Esc** (MonthPicker, PeriodPicker, DateField, settings menu, pie range picker, category icon picker) — pointer-only backdrop scrim was the only dismiss → shared `useEscClose` hook added to all six. (Modal already had Esc — verified still working; the Recharts tooltip carries a hidden `role="dialog"`, a red herring in testing.)
+- **P1 · "Add year" tile was a clickable `<div>`** (not Tab-reachable) → semantic `<button>` with `aria-label`. (MetricTile's optional `onClick` is never used in practice — left as-is.)
+
+### Understandable / Robust — names & structure
+- **P1 · 25 unlabeled year-config inputs** (Aid tab: Grant/Tuition/Health ins/Housing/Other × 5 years) → dynamic `aria-label` "{field} — {year}".
+- **P1 · 5 unlabeled budget category inputs** + savings goal Monthly/Target + APY → `aria-label`s.
+- **P1 · Weekly "Category" + Subscriptions "Billing cycle" `<select>`s** unnamed → `aria-label`s.
+- **P1 · Banner dismiss ✕** had no name → `aria-label="Dismiss"`.
+- **P1 · Settings popover was `role="menu"`** with non-menuitem children (profile block, theme toggle) → `aria-required-children` fail. It's a mixed-content popover, not a menu → `role="group" aria-label="Settings"`, dropped the 5 `role="menuitem"`.
+
+### Tooling note
+The app's service worker serves stale `index.html` on normal reloads — verification required unregistering the SW + clearing caches, then a fresh load, per pass. Reconfirm any future axe run is against fresh code (`navigator.serviceWorker.controller === null`).
+
 ## 2026-06-11 (fourth pass) — User feedback round 3 (8 items)
 
 - **P1 · Native date-picker calendar popup can't be themed** → custom `DateField` (glass day grid, Monday-start, marigold today, "Today" shortcut) replaced all 9 native date inputs; dead `::-webkit-calendar-picker` CSS removed.

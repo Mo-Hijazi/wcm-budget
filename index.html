@@ -44,7 +44,7 @@
     --bg: #101210;
     --text: #F6EFDD;
     --text-dim: rgba(246,239,221,0.5);
-    --text-faint: rgba(246,239,221,0.38);
+    --text-faint: rgba(246,239,221,0.46);
     --text-soft: rgba(246,239,221,0.45);
     --input-bg: rgba(255,255,255,0.08);
     --input-border: rgba(255,255,255,0.14);
@@ -79,8 +79,8 @@
   [data-theme="light"] {
     --bg: #ECEAE2;
     --text: #26251E;
-    --text-dim: rgba(38,37,30,0.55);
-    --text-faint: rgba(38,37,30,0.48);
+    --text-dim: rgba(38,37,30,0.68);
+    --text-faint: rgba(38,37,30,0.58);
     --text-soft: rgba(38,37,30,0.45);
     --input-bg: rgba(30,30,20,0.05);
     --input-border: rgba(30,30,20,0.14);
@@ -98,7 +98,7 @@
     --glass-card-border-fallback: rgba(30,30,20,0.12);
     --glass-primary: rgba(255,255,255,0.48);
     --glass-primary-border: rgba(255,255,255,0.85);
-    --glass-modal: rgba(255,255,255,0.22);
+    --glass-modal: rgba(255,255,255,0.45);
     --glass-modal-fallback: #F7F5EE;
     --blob-opacity: 0.90;
     --blob1-a: #C4BFA6; --blob1-b: #DAD6C8;
@@ -684,7 +684,7 @@ const THEMES = {
     // Text
     text:       "#F6EFDD",
     textMid:    "rgba(246,239,221,0.65)",
-    gray:       "rgba(246,239,221,0.52)",
+    gray:       "rgba(246,239,221,0.63)",
     // Borders
     border:     "rgba(255,255,255,0.12)",
     borderDark: "rgba(255,255,255,0.20)",
@@ -738,44 +738,44 @@ const THEMES = {
     sel:        "rgba(38,37,30,0.55)",
     selBg:      "rgba(38,37,30,0.08)",
     tabActiveBg:"rgba(255,255,255,0.96)",
-    tabMuted:   "rgba(38,37,30,0.55)",
+    tabMuted:   "rgba(38,37,30,0.68)",
     creamSoft:  "rgba(38,37,30,0.08)",
     // Text
     text:       "#26251E",
     textMid:    "rgba(38,37,30,0.68)",
-    gray:       "rgba(38,37,30,0.55)",
+    gray:       "rgba(38,37,30,0.68)",
     // Borders
     border:     "rgba(30,30,20,0.12)",
     borderDark: "rgba(30,30,20,0.20)",
     // Destructive / errors — clay, darkened for contrast on light
-    danger:      "#B05A38",
+    danger:      "#964B2E",
     dangerLight: "rgba(176,90,56,0.12)",
     dangerMid:   "rgba(176,90,56,0.30)",
     // Negative data — amber, darkened
     neg:        "#9C6A00",
     negLight:   "rgba(156,106,0,0.10)",
     negMid:     "rgba(156,106,0,0.28)",
-    // Positive — blue, darkened
-    teal:       "#33689E",
+    // Positive — blue, darkened for AA text contrast on light cards
+    teal:       "#2F6196",
     tealLight:  "rgba(51,104,158,0.10)",
     tealMid:    "rgba(51,104,158,0.30)",
-    green:      "#33689E",
+    green:      "#2F6196",
     greenLight: "rgba(51,104,158,0.10)",
     greenMid:   "rgba(51,104,158,0.30)",
     // Info — slate
-    blue:       "#5C7282",
+    blue:       "#4F6373",
     blueLight:  "rgba(92,114,130,0.10)",
     blueMid:    "rgba(92,114,130,0.28)",
     // Milestone / warning — marigold, darkened for text legibility on light
-    amber:      "#A87B12",
+    amber:      "#7A5A0D",
     amberLight: "rgba(168,123,18,0.12)",
     amberMid:   "rgba(168,123,18,0.30)",
-    purple:     "#A87B12",
+    purple:     "#7A5A0D",
     purpleLight:"rgba(168,123,18,0.12)",
     // Brand tokens
     ink:        "#26251E",
     cream:      "#F6EFDD",
-    marigold:   "#A87B12",
+    marigold:   "#7A5A0D",
     lowTide:    "#9A9E8D",
     // Same hue order as dark, lifted ~30 L points down; cream slot → ink
     chartColors: ["#33689E","#C8861A","#B06A45","#5E7A68","#9A9474","#4A7AAE","#8A6A10","#26251E","#5E88A8","#7E5E94"],
@@ -1197,6 +1197,7 @@ const MonthPicker = ({value, onChange}) => {
   const [open, setOpen] = useState(false);
   const btnRef = React.useRef(null);
   useLiftCard(open, btnRef);
+  useEscClose(open, ()=>setOpen(false));
   return (
     <div style={{position:"relative"}}>
       <button className="btn-pop" ref={btnRef} onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:open?C.selBg:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>
@@ -1235,6 +1236,16 @@ const useLiftCard = (open, ref) => {
     return ()=>{ card.style.zIndex = prev; };
   },[open]);
 };
+// Keyboard dismissal for popovers — backdrop scrims are pointer-only, so Esc is the
+// keyboard path to close without selecting (WCAG 2.1.1). Mirrors the Modal's Esc handler.
+const useEscClose = (open, close) => {
+  useEffect(()=>{
+    if(!open) return;
+    const onKey = e => { if(e.key==="Escape"){ e.stopPropagation(); close(); } };
+    document.addEventListener("keydown", onKey);
+    return ()=> document.removeEventListener("keydown", onKey);
+  },[open]);
+};
 
 // Period dropdown for comparisons — pick a full year or a single month within it
 const PeriodPicker = ({value, onChange, yearsList}) => {
@@ -1244,6 +1255,7 @@ const PeriodPicker = ({value, onChange, yearsList}) => {
   const [browseYr, setBrowseYr] = useState(value.ayId);
   useEffect(()=>{ if(open) setBrowseYr(value.ayId); },[open]);
   useLiftCard(open, btnRef);
+  useEscClose(open, ()=>setOpen(false));
   const yLabel = id => { const y=yearsList.find(y=>y.id===id); return y ? y.label.split("—")[0].trim() : ""; };
   const label = value.type==="year" ? yLabel(value.ayId) : `${MONTH_NAMES[value.mi]} · ${yLabel(value.ayId)}`;
   return (
@@ -1289,6 +1301,7 @@ const DateField = ({value, onChange, style={}, ariaLabel="Date"}) => {
   const [view, setView] = useState(()=> (value||todayIso).slice(0,7));
   useEffect(()=>{ if(open) setView((value||todayIso).slice(0,7)); },[open]);
   useLiftCard(open, btnRef);
+  useEscClose(open, ()=>setOpen(false));
   // Modal panels (.mm) scroll-clip absolute popovers — anchor fixed to the button instead, flipping up when cramped.
   const [fixedPos, setFixedPos] = useState(null);
   useEffect(()=>{
@@ -1395,7 +1408,7 @@ const Banner = ({children, type="info", onClose}) => {
   return (
     <div style={{background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:12, color:s.color, display:"flex", gap:10, alignItems:"flex-start", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)"}}>
       <div style={{flex:1, lineHeight:1.6}}>{children}</div>
-      {onClose && <button className="txt-act" onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}><Icon name="close" size={13}/></button>}
+      {onClose && <button className="txt-act" aria-label="Dismiss" onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s.color,lineHeight:1,padding:0,flexShrink:0,opacity:0.7}}><Icon name="close" size={13}/></button>}
     </div>
   );
 };
@@ -2713,6 +2726,25 @@ function App() {
   const [pieMonthEnd, setPieMonthEnd] = useState(null);
   const [piePickerOpen, setPiePickerOpen] = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
+  // Esc closes the chromeless popovers (settings menu, pie range picker, category icon picker)
+  useEscClose(settingsOpen, ()=>setSettingsOpen(false));
+  useEscClose(piePickerOpen, ()=>setPiePickerOpen(false));
+  useEscClose(editIconCat!==null, ()=>setEditIconCat(null));
+  // Recharts paints role="img" bar/sector paths with no accessible name — pure decoration
+  // (every figure is also shown as text + each chart has a visible title). Hide the chart
+  // graphics from assistive tech so AT doesn't announce dozens of nameless images. (WCAG 1.1.1)
+  useEffect(()=>{
+    const hide=()=>document.querySelectorAll('.recharts-surface').forEach(s=>{
+      if(s.getAttribute('aria-hidden')!=='true'){s.setAttribute('aria-hidden','true');s.setAttribute('focusable','false');}
+      // an aria-hidden subtree must not contain anything focusable (Recharts tabindexes the pie)
+      if(s.getAttribute('tabindex')!=null && s.getAttribute('tabindex')!=='-1') s.setAttribute('tabindex','-1');
+      s.querySelectorAll('[tabindex]:not([tabindex="-1"])').forEach(e=>e.setAttribute('tabindex','-1'));
+    });
+    hide();
+    const mo=new MutationObserver(hide);
+    mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['tabindex']});
+    return ()=>mo.disconnect();
+  },[]);
   const [csvText, setCsvText] = useState("");
   const [csvRows, setCsvRows] = useState(null);
   const [csvError, setCsvError] = useState(null);
@@ -3837,7 +3869,7 @@ function App() {
               </button>
               {settingsOpen && <>
                 <div onClick={()=>setSettingsOpen(false)} style={{position:"fixed",inset:0,zIndex:99}}/>
-                <div role="menu" style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:100,width:214,padding:6,background:C.glassTooltip,backdropFilter:"blur(50px) saturate(200%)",WebkitBackdropFilter:"blur(50px) saturate(200%)",border:`1px solid ${C.borderDark}`,borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"}}>
+                <div role="group" aria-label="Settings" style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:100,width:214,padding:6,background:C.glassTooltip,backdropFilter:"blur(50px) saturate(200%)",WebkitBackdropFilter:"blur(50px) saturate(200%)",border:`1px solid ${C.borderDark}`,borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,0.40)"}}>
                   {/* Profile block */}
                   <div style={{padding:"8px 10px 10px",borderBottom:`1px solid ${C.border}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
@@ -3861,7 +3893,7 @@ function App() {
                       </div>
                     </div>
                     {profile?.school && (
-                      <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);setEditSchool(true);setEditName(false);}} title={profile.school}
+                      <button className="menu-row" onClick={()=>{setSettingsOpen(false);setEditSchool(true);setEditName(false);}} title={profile.school}
                         style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",padding:"5px 8px",borderRadius:6,border:"none",background:C.surfaceMid,cursor:"pointer",textAlign:"left"}}>
                         <span style={{fontSize:10.5,color:C.gray,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{profile.school}</span>
                         <span style={{fontSize:10.5,color:C.teal,flexShrink:0}}>Change</span>
@@ -3873,7 +3905,7 @@ function App() {
                         : dp.dual==="masters" ? `${deg} + Master's${dp.masters?.field?` · ${dp.masters.field}`:""}`
                         : dp.dual==="other" ? `${deg}${dp.other?.field?` · ${dp.other.field}`:" · dual degree"}` : `${deg} only`;
                       return (
-                        <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);setEditProgram(true);setEditName(false);}} title={summary}
+                        <button className="menu-row" onClick={()=>{setSettingsOpen(false);setEditProgram(true);setEditName(false);}} title={summary}
                           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",marginTop:4,padding:"5px 8px",borderRadius:6,border:"none",background:C.surfaceMid,cursor:"pointer",textAlign:"left"}}>
                           <span style={{fontSize:10.5,color:C.gray,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</span>
                           <span style={{fontSize:10.5,color:C.teal,flexShrink:0}}>Change</span>
@@ -3883,11 +3915,11 @@ function App() {
                   </div>
                   {/* Actions */}
                   <div style={{padding:"4px 0"}}>
-                    <button role="menuitem" className="menu-row" onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.text,fontSize:12,fontWeight:500,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
+                    <button className="menu-row" onClick={()=>{const d=JSON.parse(JSON.stringify(data));d.darkMode=!d.darkMode;upd(d);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.text,fontSize:12,fontWeight:500,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
                       <span key={data.darkMode?"sun":"moon"} style={{display:"inline-flex",animation:"iconSwap 220ms cubic-bezier(0.23,1,0.32,1)"}}><Icon name={data.darkMode?"sun":"moon"} size={14}/></span>
                       {data.darkMode?"Light mode":"Dark mode"}
                     </button>
-                    <button role="menuitem" className="menu-row" onClick={()=>{setConfirmReset(true);setSettingsOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.danger,fontSize:12,fontWeight:500,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
+                    <button className="menu-row" onClick={()=>{setConfirmReset(true);setSettingsOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.danger,fontSize:12,fontWeight:500,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
                       <Icon name="subs" size={14}/>
                       Reset defaults
                     </button>
@@ -3899,7 +3931,7 @@ function App() {
                       <span style={{fontSize:10.5,color:C.border,padding:"0 5px"}}>·</span>
                       <a href="privacy.html" target="_blank" rel="noopener" style={{fontSize:10.5,color:C.gray,textDecoration:"none",borderBottom:`1px solid ${C.border}`}}>Privacy</a>
                     </div>
-                    <button role="menuitem" className="menu-row" onClick={()=>{setSettingsOpen(false);sb.auth.signOut();}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
+                    <button className="menu-row" onClick={()=>{setSettingsOpen(false);sb.auth.signOut();}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px",borderRadius:8,border:"none",background:"transparent",color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",textAlign:"left",transition:"background .15s"}}>
                       <Icon name="live" size={14}/>
                       Sign out
                     </button>
@@ -4026,6 +4058,7 @@ function App() {
                   {isAuto
                     ? <span style={{fontSize:13,fontWeight:600,color:C.blue,minWidth:72,textAlign:"right"}}>{fmt(amt)}<span style={{fontSize:10,color:C.gray,fontWeight:400}}> auto</span></span>
                     : <input type="number" value={getMonthVal(cat.id)} onChange={e=>setMo(ay,cat.id,e.target.value)}
+                        aria-label={`Monthly budget for ${cat.label}`}
                         style={{width:80,textAlign:"right",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",background:C.bg,color:C.text,fontWeight:600}}/>
                   }
                   <span style={{fontSize:10,color:C.gray,width:28,textAlign:"right"}}>{pct}%</span>
@@ -4201,7 +4234,7 @@ function App() {
                 </div>
                 <div>
                   <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Category</div>
-                  <select value={wCat} onChange={e=>setWCat(e.target.value)}
+                  <select value={wCat} onChange={e=>setWCat(e.target.value)} aria-label="Category"
                     style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",background:C.bg,color:C.text,boxSizing:"border-box"}}>
                     <option value="">Select category…</option>
                     {cats.filter(c=>!c.autoCalc&&!c.locked).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
@@ -4821,10 +4854,10 @@ function App() {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,flexWrap:"wrap",gap:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
                         <span style={{color:C.gray}}>Monthly:</span>
-                        <input type="number" value={g.monthlyContribution||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].monthlyContribution=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <input type="number" value={g.monthlyContribution||0} aria-label={`Monthly contribution for ${g.label}`} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].monthlyContribution=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
                         <span style={{color:C.gray}}>/mo</span>
                         <span style={{color:C.gray,marginLeft:8}}>Target:</span>
-                        <input type="number" value={g.targetAmount} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
+                        <input type="number" value={g.targetAmount} aria-label={`Target amount for ${g.label}`} onChange={e=>{const d=JSON.parse(JSON.stringify(data));const i=d.stepGoals.findIndex(x=>x.id===g.id);if(i>=0)d.stepGoals[i].targetAmount=Number(e.target.value)||0;upd(d);}} style={{width:68,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 7px",background:C.bg,color:C.text}}/>
                       </div>
                       {!funded&&<button className="btn-fill" onClick={()=>{setSavingsDepositGoal(g.id);setSavingsDepositDate(todayStr());}} style={{fontSize:12,padding:"6px 16px",borderRadius:8,border:"none",background:C.teal,color:C.bg,cursor:"pointer",fontWeight:600}}>Log deposit</button>}
                     </div>
@@ -4903,7 +4936,7 @@ function App() {
             <div style={{fontSize:11,color:C.gray,marginBottom:12}}>How your running balance + monthly savings could grow over 60 months at a given APY (e.g. a HYSA).</div>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
               <span style={{fontSize:13,color:C.textMid,fontWeight:500}}>APY</span>
-              <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
+              <input type="number" step="0.1" value={savingsApy} onChange={e=>setSavingsApy(e.target.value)} aria-label="Savings APY percent" style={{width:68,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 8px",background:C.bg,color:C.text,textAlign:"center"}}/>
               <span style={{fontSize:12,color:C.gray}}>%</span>
               <span style={{fontSize:12,color:C.gray,marginLeft:4}}>Starting balance: <strong style={{color:totalAccumulatedBalance>=0?C.teal:C.neg}}>{fmtS(totalAccumulatedBalance)}</strong></span>
               <span style={{fontSize:12,color:C.gray}}>+ {fmt(yr.monthly.savings||0)}/mo savings</span>
@@ -5081,9 +5114,9 @@ function App() {
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                         <span style={{fontSize:12,color:C.textMid}}>{label}</span>
                         {isHousing
-                          ? <input type="number" value={y.monthly.housing||0} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].monthly.housing=Number(e.target.value)||0;upd(d);}}
+                          ? <input type="number" value={y.monthly.housing||0} aria-label={`${label} — ${y.label||'Year '+(i+1)}`} onChange={e=>{const d=JSON.parse(JSON.stringify(data));d.years[i].monthly.housing=Number(e.target.value)||0;upd(d);}}
                               style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 7px",background:C.bg,color:C.text}}/>
-                          : <input type="number" value={y[field]} onChange={e=>setYrF(i,field,e.target.value)}
+                          : <input type="number" value={y[field]} aria-label={`${label} — ${y.label||'Year '+(i+1)}`} onChange={e=>setYrF(i,field,e.target.value)}
                               style={{width:90,textAlign:"right",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 7px",background:C.bg,color:C.text}}/>
                         }
                       </div>
@@ -5097,12 +5130,12 @@ function App() {
                 </Card>
               );
             })}
-            <div onClick={()=>setShowAddYear(true)} style={{border:`2px dashed ${C.border}`,borderRadius:12,minHeight:120,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",color:C.gray,transition:"border-color 0.15s, color 0.15s"}}
+            <button type="button" aria-label="Add year" onClick={()=>setShowAddYear(true)} style={{width:"100%",font:"inherit",background:"transparent",border:`2px dashed ${C.border}`,borderRadius:12,minHeight:120,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",color:C.gray,transition:"border-color 0.15s, color 0.15s"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=C.teal;e.currentTarget.style.color=C.teal;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.gray;}}>
               <span style={{fontSize:24,fontWeight:300,lineHeight:1}}>+</span>
               <span style={{fontSize:12,fontWeight:600}}>Add year</span>
-            </div>
+            </button>
           </div>
 
           {/* 5-year table */}
@@ -5173,7 +5206,7 @@ function App() {
                   </div>
                   <div>
                     <div style={{fontSize:11,color:C.gray,marginBottom:4,fontWeight:500}}>Billing cycle</div>
-                    <select value={subCycle} onChange={e=>setSubCycle(e.target.value)}
+                    <select value={subCycle} onChange={e=>setSubCycle(e.target.value)} aria-label="Billing cycle"
                       style={{width:"100%",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",background:C.bg,boxSizing:"border-box"}}>
                       <option value="monthly">Monthly</option>
                       <option value="annual">Annual</option>
