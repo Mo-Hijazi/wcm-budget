@@ -2,6 +2,33 @@
 
 Newest first. One line per finding: severity · what · fix.
 
+## 2026-06-23 (chunk 2) — ADA P1: first-run onboarding + manual keyboard / AX-tree / 200%-zoom on the signed-in app
+
+Method: axe-core 4.10 **plus** the manual passes axe can't do (programmatic selected-state, keyboard roving, focus-trap, accessible-name/AX-tree as a VoiceOver proxy). Onboarding audited via an **isolated mock mount** of `OnboardingFlow` (first-run props, no-op `upd`/`onDone`) so the owner's real synced data was never touched (verified: 0 `upd`/0 `onDone` calls). All steps scanned both themes (axe-clean throughout). Three real findings surfaced beyond axe — all remediated + re-verified in-browser. End state after fixes: **app axe-clean both themes, no console errors, no visual regression; arrow-key + focus-trap + selected-state all confirmed working.**
+
+### Findings (things axe can't catch) + fixes
+- **P1 · 4.1.2 · single-select controls announced no selected state app-wide** — main nav tabs (Budget…Categories) + year pills (Year 1–5) + onboarding avatar look/color + program track + year-count all showed the active item with a ring only (no `aria-*`). Screen-reader users couldn't tell what was active. Fixes (all in `index.html`):
+  - New reusable `ChoiceGroup` (role wrapper + arrow-key roving: ←→↑↓/Home/End move **and** select per APG) + `radioProps(active)` / `tabProps(active,id,panelId)` helpers, inserted before `TabBtn`.
+  - **Main nav → ARIA Tabs pattern:** tab bar `<div className="tabbar">`→`ChoiceGroup role="tablist"`; `TabBtn` spreads `tabProps` (`role=tab` + `aria-selected` + roving `tabindex` + `id="tab-<id>"` + `aria-controls="tab-panel"`); each of the 7 panel root divs tagged `role="tabpanel" id="tab-panel" aria-labelledby="tab-<id>" tabIndex={0}` (charts panel = the div returned by its IIFE).
+  - **Year pills → `role="radiogroup"` aria-label "Academic year";** `YrBtn` spreads `radioProps` + `aria-label="Show Year N"`.
+  - **Onboarding:** program track → `ChoiceGroup role="radiogroup"` "Dual degree"; year count → `radiogroup` "Number of years total" (+ `aria-label="N years"`); avatar look/color/google/upload buttons → `aria-pressed` (gallery is a 2-D grid → toggle-button semantics, each a Tab stop; look icons also gained `aria-label` alongside the `title`).
+- **P1 (serious) · 4.1.2 · school-picker results `<div role="listbox">` had no accessible name** (`aria-input-field-name`) **and** held `<button role="option">` (invalid — options aren't buttons). 4 sites (ProfileModal/Settings ×2, onboarding ×2). Fix: dropped `role="listbox"`/`role="option"`; results are now a named group of action buttons — `role="group" aria-label="School results"` (campus lists `"Campuses"`). axe violation gone; buttons stay keyboard-operable.
+- **P1 · 2.4.3 · onboarding didn't trap keyboard focus** — dialog was otherwise correct (`aria-modal="true"` + `aria-label`) but Tab escaped to the dashboard behind it (empirically reached "Year 1" after ~14 Tabs). Fix: focus-trap effect in `OnboardingFlow` (mirrors `Modal`'s; keyed on `step`, wraps Tab/Shift-Tab + pulls stray focus back). Re-verified: 25 Tabs, focus stayed inside.
+
+### Passed (no change needed)
+- **200%-zoom / reflow (1.4.4 / 1.4.10): PASS** — tested via half-width reflow: tiles wrap, two-column layout stacks, no page-level horizontal scroll; tab strip is `overflow-x:auto` (Categories reachable, not lost).
+- Onboarding finish-error already uses `role="alert"`; global `:focus-visible` ring (line 179) covers all new controls; both themes axe-clean.
+
+### Live VoiceOver listen-through — DONE (⌘F5, real macOS VO, via Zoom screen-share to read the caption panel)
+The AX-tree proxy was confirmed by ear against the actual screen reader. Every fix announced correctly:
+- Nav tab: *"Budget, selected, tab, 1 of 7"*; ArrowRight → *"selected tab, 2 of 7"* and the panel actually switched (arrow moves **and** activates, per APG).
+- Year pill: *"Show Year 1, selected, radio button, 1 of 1, Academic year, radio group."*
+- Onboarding dialog: *"…inside of a dialog"*; avatar swatch: *"…toggle button, inside of a dialog"*; school result: *"Weill Cornell Medical College, button, School results, group"* (no broken listbox); dual-degree radio: *"…MD only, selected, radio button, 1 of 4, Dual degree, radio group."*
+- Focus trap: Tab past the last control wraps back to the first. Mock-mount writes stayed at 0 `upd`/0 `onDone`.
+
+### Polish — tab-strip scroll affordance — DONE (HIG-correct edge fade, not a "more →" button)
+The old `@media (max-width:600px)` mask was a **content-blind breakpoint** — at 700px the strip already overflowed (645px in 643px) but got no fade, while a future extra tab/badge would drift the true overflow point anyway. Replaced with `useEdgeFade(ref)`: measures `scrollWidth/clientWidth/scrollLeft` via `ResizeObserver` + scroll listener and toggles `.fade-l`/`.fade-r` only on the edge that genuinely has more content. Wired into `ChoiceGroup` (nav tabs + year pills) and a new `ScrollX` wrapper (5-year overview table, same breakpoint bug). Decorative only (no motion → reduced-motion-safe). Verified in-browser: 600px → `fade-r`; scrolled to end → flips to `fade-l`; 1400px (no overflow) → no fade class.
+
 ## 2026-06-23 (later) — ADA P1 part C: static pages + login screen (no-login-required surfaces)
 
 Method: axe-core 4.10 per-view, login screen scanned in **both themes**, static pages on their solid dark bg. End state: **axe-clean on `/`, `/privacy.html`, `/terms.html` (login both themes)**. These three surfaces are reachable without auth so they could be audited this session; onboarding + signed-in 200%-zoom + VoiceOver still pending (need a logged-in session).

@@ -215,16 +215,16 @@
     .btn-fill:hover:not(:disabled) { filter: brightness(1.07); transform: scale(1.02); }
   }
   .txt-act { cursor: pointer; opacity: 0.72; transition: opacity 140ms ease; }
-  /* Tab bar: hide scrollbar; on narrow screens fade the right edge to hint more tabs */
+  /* Tab bar: hide scrollbar. Edge fades are applied via .fade-l/.fade-r,
+     toggled at runtime by useEdgeFade() based on actual scroll overflow —
+     not a viewport breakpoint, since overflow depends on content (badge
+     counts, font metrics), not window width. */
   .tabbar { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .tabbar::-webkit-scrollbar { display: none; }
-  @media (max-width: 600px) {
-    .tabbar, .scrollx {
-      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
-              mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
-    }
-  }
   .scrollx { scrollbar-width: thin; }
+  .tabbar.fade-l, .scrollx.fade-l { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 100%); mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 100%); }
+  .tabbar.fade-r, .scrollx.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%); }
+  .tabbar.fade-l.fade-r, .scrollx.fade-l.fade-r { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%); }
   /* Subtle themed scrollbar for in-panel scroll areas (avatar gallery) */
   .av-scroll { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb, rgba(140,138,128,0.35)) transparent; }
   .av-scroll::-webkit-scrollbar { width: 6px; }
@@ -1362,8 +1362,69 @@ const SectionTitle = ({children, sub}) => (
   </div>
 );
 
-const TabBtn = ({label, active, onClick, badge}) => (
-  <button onClick={onClick} className={active?undefined:"shimmer-text"} style={{
+// Edge-fade affordance for horizontally-scrollable strips (tab bar, year
+// pills, wide tables). A fixed CSS breakpoint can't track this reliably —
+// overflow depends on content (badge counts, font metrics), not viewport
+// width — so we measure the actual scrollWidth/clientWidth/scrollLeft and
+// only show a fade on the edge that truly has more content past it. Purely
+// decorative (no motion), so it doesn't interact with prefers-reduced-motion.
+const useEdgeFade = (ref, deps=[]) => {
+  const [fade, setFade] = React.useState({l:false, r:false});
+  const check = React.useCallback(()=>{
+    const el = ref.current; if(!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setFade({l: el.scrollLeft > 1, r: el.scrollLeft < max - 1});
+  },[ref]);
+  useEffect(()=>{
+    check();
+    const el = ref.current; if(!el) return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    el.addEventListener("scroll", check, {passive:true});
+    return ()=>{ ro.disconnect(); el.removeEventListener("scroll", check); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[check, ...deps]);
+  return fade;
+};
+const edgeFadeClass = fade => [fade.l&&"fade-l", fade.r&&"fade-r"].filter(Boolean).join(" ");
+
+// ── Accessible single-select groups (WCAG 4.1.2 + keyboard) ───────────────
+// One reusable wrapper so "pick one" controls (tabs, year pills, onboarding
+// choices) announce the active item to screen readers AND support the
+// expected arrow-key roving focus. The visible button styling is untouched —
+// this only layers role/state semantics + keyboard on top.
+const ChoiceGroup = ({role="radiogroup", ariaLabel, ariaLabelledby, className, style, children}) => {
+  const ref = React.useRef(null);
+  const fade = useEdgeFade(ref, [children]);
+  const onKeyDown = e => {
+    if(!["ArrowRight","ArrowLeft","ArrowUp","ArrowDown","Home","End"].includes(e.key)) return;
+    const items = [...ref.current.querySelectorAll('[role="radio"]:not([disabled]),[role="tab"]:not([disabled])')]
+      .filter(el=>el.offsetParent!==null);
+    if(!items.length) return;
+    const cur = items.indexOf(document.activeElement);
+    let next;
+    if(e.key==="Home") next=0;
+    else if(e.key==="End") next=items.length-1;
+    else { const dir=(e.key==="ArrowRight"||e.key==="ArrowDown")?1:-1; next=((cur<0?0:cur)+dir+items.length)%items.length; }
+    e.preventDefault();
+    items[next].focus();
+    items[next].click(); // radio/tab: arrow moves AND selects (APG)
+  };
+  return <div ref={ref} role={role} aria-label={ariaLabel} aria-labelledby={ariaLabelledby}
+    className={[className, edgeFadeClass(fade)].filter(Boolean).join(" ")} style={style} onKeyDown={onKeyDown}>{children}</div>;
+};
+// Spread onto each option button. Active item is the only one in the Tab order.
+const radioProps = active => ({role:"radio","aria-checked":active?"true":"false", tabIndex:active?0:-1});
+const tabProps = (active, id, panelId) => ({role:"tab","aria-selected":active?"true":"false", tabIndex:active?0:-1, id, "aria-controls":panelId});
+// Plain scrollable strip (not a choice group, e.g. wide tables) — same edge-fade affordance.
+const ScrollX = ({className, style, children}) => {
+  const ref = React.useRef(null);
+  const fade = useEdgeFade(ref, [children]);
+  return <div ref={ref} className={[className, edgeFadeClass(fade)].filter(Boolean).join(" ")} style={style}>{children}</div>;
+};
+
+const TabBtn = ({label, active, onClick, badge, id}) => (
+  <button onClick={onClick} {...tabProps(active, "tab-"+id, "tab-panel")} className={active?undefined:"shimmer-text"} style={{
     padding:"7px 16px", border:"none",
     borderRadius:28,
     background: active ? C.tabActiveBg : "transparent",
@@ -1380,7 +1441,7 @@ const TabBtn = ({label, active, onClick, badge}) => (
 );
 
 const YrBtn = ({yr, active, onClick}) => (
-  <button onClick={onClick} className={active?undefined:"shimmer-text"} style={{
+  <button onClick={onClick} {...radioProps(active)} aria-label={"Show "+yr.label.split("—")[0].trim()} className={active?undefined:"shimmer-text"} style={{
     padding:"6px 14px", border:"none", borderRadius:28,
     background: active ? C.tabActiveBg : "transparent",
     color: active ? C.ink : C.tabMuted,
@@ -1875,9 +1936,9 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
       </> : needsCampus ? <>
         <div style={{fontSize:12.5,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
         <div style={{fontSize:12,color:C.gray,marginBottom:8}}>Which campus?</div>
-        <div role="listbox" style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+        <div role="group" aria-label="Campuses" style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
           {picked.campuses.map(c=>(
-            <button key={c} role="option" className="menu-row" onClick={()=>setCampus(c)}
+            <button key={c} className="menu-row" onClick={()=>setCampus(c)}
               style={{display:"block",width:"100%",textAlign:"left",padding:"9px 12px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>{c}</button>
           ))}
         </div>
@@ -1890,9 +1951,9 @@ const ProfileModal = ({uid, onSaved, onClose}) => {
       </> : <>
         <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search your school…" style={inputStyle}/>
         {matches.length>0 && (
-          <div role="listbox" style={{marginTop:6,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",maxHeight:264,overflowY:"auto"}}>
+          <div role="group" aria-label="School results" style={{marginTop:6,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",maxHeight:264,overflowY:"auto"}}>
             {matches.map(s=>(
-              <button key={s.name} role="option" className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}}
+              <button key={s.name} className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}}
                 style={{display:"block",width:"100%",textAlign:"left",padding:"9px 12px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>{s.name}{s.campuses?" ›":""}</button>
             ))}
           </div>
@@ -2023,12 +2084,12 @@ const AvatarPicker = ({value, onChange, googlePhoto}) => {
       </div>
       <div style={{display:"flex",gap:10,justifyContent:"center",alignItems:"center",marginBottom:13,flexWrap:"wrap"}}>
         {googlePhoto && (
-          <button className="ob-swatch" onClick={()=>onChange({type:"google",url:googlePhoto})} aria-label="Use Google photo"
+          <button className="ob-swatch" onClick={()=>onChange({type:"google",url:googlePhoto})} aria-label="Use Google photo" aria-pressed={!!(value&&value.type==="google")}
             style={{padding:0,border:`2px solid ${value&&value.type==="google"?C.marigold:"transparent"}`,borderRadius:"50%",background:"transparent",cursor:"pointer",lineHeight:0}}>
             <img src={googlePhoto} alt="" width={40} height={40} referrerPolicy="no-referrer" style={{borderRadius:"50%",objectFit:"cover",display:"block"}}/>
           </button>
         )}
-        <button className="btn-pop" onClick={()=>fileRef.current&&fileRef.current.click()}
+        <button className="btn-pop" onClick={()=>fileRef.current&&fileRef.current.click()} aria-pressed={!!(value&&value.type==="upload")}
           style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,border:`1px solid ${value&&value.type==="upload"?C.sel:C.border}`,background:value&&value.type==="upload"?C.selBg:"transparent",color:C.text,fontSize:12.5,cursor:"pointer"}}>
           <Icon name="plus" size={13}/>{value&&value.type==="upload"?"Photo added":"Upload photo"}
         </button>
@@ -2037,7 +2098,7 @@ const AvatarPicker = ({value, onChange, googlePhoto}) => {
       <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:14,flexWrap:"wrap"}}>
         {AV_PALETTE.map(p=>{
           const sel = value && value.type==="art" && (value.color||"marigold")===p.key;
-          return <button key={p.key} aria-label={p.label}
+          return <button key={p.key} aria-label={p.label} aria-pressed={!!sel}
             onClick={()=>{setColor(p.key); onChange(value&&value.type==="art"?{...value,color:p.key}:{type:"art",style:"buddy",color:p.key});}}
             style={{width:22,height:22,borderRadius:"50%",background:p.c,border:`2px solid ${sel?C.text:"transparent"}`,boxShadow:sel?`0 0 0 1px ${C.text}`:"none",cursor:"pointer",padding:0}}/>;
         })}
@@ -2049,7 +2110,7 @@ const AvatarPicker = ({value, onChange, googlePhoto}) => {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(46px,1fr))",gap:7}}>
               {AVATARS.filter(a=>a.group===g.key).map(a=>{
                 const sel = value && value.type==="art" && value.style===a.id;
-                return <button key={a.id} title={a.label} onClick={()=>onChange({type:"art",style:a.id,color})}
+                return <button key={a.id} title={a.label} aria-label={a.label} aria-pressed={!!sel} onClick={()=>onChange({type:"art",style:a.id,color})}
                   style={{padding:2,borderRadius:"50%",border:`2px solid ${sel?C.marigold:"transparent"}`,background:"transparent",cursor:"pointer",lineHeight:0,display:"flex",justifyContent:"center"}}>
                   <AvatarArt style={a.id} color={color} size={42}/>
                 </button>;
@@ -2244,8 +2305,27 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
   const dotsTotal = 4; // name, avatar, school, program
   const dotIdx = step-1; // welcome(0) shows none
 
+  // Keyboard focus trap: this is a hard-gate modal (no Escape/cancel on first run),
+  // so Tab must stay inside the dialog instead of escaping to the app behind it (WCAG 2.4.3).
+  const dlgRef = React.useRef(null);
+  useEffect(()=>{
+    const panel = dlgRef.current; if(!panel) return;
+    const focusables = () => [...panel.querySelectorAll('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
+      .filter(el=>!el.disabled && el.offsetParent!==null);
+    const onKey = (e) => {
+      if(e.key!=="Tab") return;
+      const f = focusables(); if(!f.length) return;
+      const first=f[0], last=f[f.length-1];
+      if(!panel.contains(document.activeElement)){ e.preventDefault(); first.focus(); }
+      else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return ()=>document.removeEventListener("keydown", onKey);
+  },[step]);
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Welcome to Marro" style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:C.scrim,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)"}}>
+    <div ref={dlgRef} role="dialog" aria-modal="true" aria-label="Welcome to Marro" style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:C.scrim,backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)"}}>
       <div className="mm" style={{position:"relative",width:"100%",maxWidth:420,padding:"36px 30px 30px",overflow:"hidden"}}>
         {onCancel && step!==5 && <button className="xbtn" onClick={onCancel} aria-label="Close setup" style={{position:"absolute",top:12,right:12,zIndex:2,width:28,height:28,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.gray,cursor:"pointer",fontSize:14,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>}
         {/* progress dots */}
@@ -2299,9 +2379,9 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
                 </> : needsCampus ? <>
                   <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:8}}>{picked.name}</div>
                   <div style={{fontSize:12,color:C.textMid,marginBottom:8}}>Which campus?</div>
-                  <div role="listbox" style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
+                  <div role="group" aria-label="Campuses" style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
                     {picked.campuses.map(c=>(
-                      <button key={c} role="option" className="menu-row" onClick={()=>setCampus(c)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{c}</button>
+                      <button key={c} className="menu-row" onClick={()=>setCampus(c)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{c}</button>
                     ))}
                   </div>
                   <button className="txt-act" onClick={resetSchool} style={{marginTop:12,border:"none",background:"transparent",color:C.teal,cursor:"pointer",fontSize:12.5,padding:0}}>← Choose a different school</button>
@@ -2313,9 +2393,9 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
                 </> : <>
                   <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search your school…" style={input}/>
                   {matches.length>0 && (
-                    <div role="listbox" style={{marginTop:8,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
+                    <div role="group" aria-label="School results" style={{marginTop:8,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",maxHeight:230,overflowY:"auto"}}>
                       {matches.map(s=>(
-                        <button key={s.name} role="option" className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{s.name}{s.campuses?" ›":""}</button>
+                        <button key={s.name} className="menu-row" onClick={()=>{setPicked(s);setCampus(null);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 13px",border:"none",borderBottom:`1px solid ${C.border}`,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>{s.name}{s.campuses?" ›":""}</button>
                       ))}
                     </div>
                   )}
@@ -2352,12 +2432,12 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
               <div style={sub}>This sets up your academic years and tailors Marro to your path. Don't know all of it yet? You can change any of this later in Settings.</div>
 
               <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginTop:18,marginBottom:8}}>{degree} program — are you doing a dual degree?</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              <ChoiceGroup role="radiogroup" ariaLabel="Dual degree" style={{display:"flex",flexWrap:"wrap",gap:8}}>
                 {tracks.map(t=>{
                   const on = dual===t.v;
-                  return <button key={String(t.v)} onClick={()=>pickTrack(t.v)} style={{flex:"1 1 45%",padding:"12px 10px",borderRadius:12,border:`1px solid ${on?C.sel:C.border}`,background:on?C.selBg:"transparent",color:C.text,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .15s"}}>{t.label}</button>;
+                  return <button key={String(t.v)} {...radioProps(on)} onClick={()=>pickTrack(t.v)} style={{flex:"1 1 45%",padding:"12px 10px",borderRadius:12,border:`1px solid ${on?C.sel:C.border}`,background:on?C.selBg:"transparent",color:C.text,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .15s"}}>{t.label}</button>;
                 })}
-              </div>
+              </ChoiceGroup>
 
               {dual==="phd" && (
                 <div style={{marginTop:14,padding:"12px 13px",borderRadius:12,border:`1px solid ${C.border}`,background:C.surface}}>
@@ -2385,11 +2465,11 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
               )}
 
               <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginTop:20,marginBottom:8}}>How many years total?</div>
-              <div style={{display:"flex",gap:6}}>
+              <ChoiceGroup role="radiogroup" ariaLabel="Number of years total" style={{display:"flex",gap:6}}>
                 {[3,4,5,6,7,8].map(n=>(
-                  <button key={n} onClick={()=>setProgLen(n)} style={{flex:1,padding:"13px 0",borderRadius:11,border:`1px solid ${progLen===n?C.sel:C.border}`,background:progLen===n?C.selBg:"transparent",color:C.text,fontSize:15,fontWeight:progLen===n?700:500,cursor:"pointer",transition:"all .2s"}}>{n}</button>
+                  <button key={n} {...radioProps(progLen===n)} aria-label={n+" years"} onClick={()=>setProgLen(n)} style={{flex:1,padding:"13px 0",borderRadius:11,border:`1px solid ${progLen===n?C.sel:C.border}`,background:progLen===n?C.selBg:"transparent",color:C.text,fontSize:15,fontWeight:progLen===n?700:500,cursor:"pointer",transition:"all .2s"}}>{n}</button>
                 ))}
-              </div>
+              </ChoiceGroup>
               {firstRun
                 ? <div style={{fontSize:11,color:C.gray,marginTop:10}}>We'll start your first year this {new Date().getFullYear()} — change dates anytime in the Aid tab.</div>
                 : <div style={{fontSize:11,color:C.gray,marginTop:10}}>Your existing year data is kept — use the Aid tab to add or remove years.</div>}
@@ -3977,7 +4057,7 @@ function App() {
 
       {/* ── Year selector — one segmented glass pill; active year's range shown once ── */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
-        <div className="tabbar" style={{
+        <ChoiceGroup role="radiogroup" ariaLabel="Academic year" className="tabbar" style={{
           display:"flex", gap:2, padding:"4px", overflowX:"auto", maxWidth:"100%",
           background:C.glassCard,
           backdropFilter:"blur(40px) saturate(180%)",
@@ -3987,7 +4067,7 @@ function App() {
           boxShadow:"0 2px 16px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.10)",
         }}>
           {data.years.map(y=><YrBtn key={y.id} yr={y} active={ay===y.id} onClick={()=>setAy(y.id)}/>)}
-        </div>
+        </ChoiceGroup>
         <span style={{fontSize:11,color:C.gray,whiteSpace:"nowrap"}}>{yrRangeLabel(data.years.find(y=>y.id===ay))}</span>
       </div>
 
@@ -4001,7 +4081,7 @@ function App() {
       </div>
 
       {/* ── Tabs ── */}
-      <div className="tabbar" style={{
+      <ChoiceGroup role="tablist" ariaLabel="Sections" className="tabbar" style={{
         display:"flex", marginBottom:24, overflowX:"auto", gap:2, padding:"4px",
         width:"fit-content", maxWidth:"100%",
         background:C.glassCard,
@@ -4019,12 +4099,12 @@ function App() {
           ["aid","Aid & Detail",0],
           ["subscriptions","Subscriptions",renewalsDue.length],
           ["customize","Categories"],
-        ].map(([id,lbl,badge])=><TabBtn key={id} label={lbl} active={tab===id} onClick={()=>setTab(id)} badge={badge||0}/>)}
-      </div>
+        ].map(([id,lbl,badge])=><TabBtn key={id} id={id} label={lbl} active={tab===id} onClick={()=>setTab(id)} badge={badge||0}/>)}
+      </ChoiceGroup>
 
       {/* ══════════════ BUDGET ══════════════ */}
       {tab==="budget" && (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-budget" tabIndex={0} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))",gap:16}}>
           <Card>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <SectionTitle>Monthly plan</SectionTitle>
@@ -4186,7 +4266,7 @@ function App() {
 
       {/* ══════════════ WEEKLY ══════════════ */}
       {tab==="weekly" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-weekly" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
           {weeklyNotice && weeklyNotice.type==="info" && (
             <Banner type="info" onClose={()=>setWeeklyNotice(null)}>
               <strong>{weeklyNotice.cat}</strong> wasn't in your {weeklyNotice.month} budget, so it's now tracked under <strong>Unbudgeted spending</strong> in the Budget tab. Tap "Add to budget" there if you want to plan for it.
@@ -4354,7 +4434,7 @@ function App() {
           return {name:m, Budgeted:Math.round(budgeted), Actual:Math.round(actual)};
         });
         return (
-          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div role="tabpanel" id="tab-panel" aria-labelledby="tab-charts" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
             {/* Running balance */}
             {(()=>{
               const balVals = runBalData.map(d=>d.balance);
@@ -4772,7 +4852,7 @@ function App() {
 
       {/* ══════════════ SAVINGS ══════════════ */}
       {tab==="savings" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-savings" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
 
           {/* STEP Exam Goals */}
           <Card>
@@ -5076,7 +5156,7 @@ function App() {
 
       {/* ══════════════ AID & DETAIL ══════════════ */}
       {tab==="aid" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-aid" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
           {!dismissed["aidnote"] && (
             <Banner type="info" onClose={()=>dismiss("aidnote")}>
               <strong>How your grant works:</strong> Your grant (including health insurance) − tuition & fees − health insurance = disbursed to you for living costs.
@@ -5142,7 +5222,7 @@ function App() {
           {/* 5-year table */}
           <Card>
             <SectionTitle>{data.years.length}-year overview</SectionTitle>
-            <div className="scrollx" style={{overflowX:"auto"}}>
+            <ScrollX className="scrollx" style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead><tr>
                   {["Year","Grant","School costs","Disbursed/yr","Spendable/mo","Budget/mo","Surplus/mo","Cumulative"].map(h=>
@@ -5171,7 +5251,7 @@ function App() {
                   })()}
                 </tbody>
               </table>
-            </div>
+            </ScrollX>
             <div style={{marginTop:10,padding:"8px 12px",background:totDisburse-totSpend>=0?C.tealLight:C.negLight,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${totDisburse-totSpend>=0?C.tealMid:C.negMid}`,borderRadius:8,fontSize:12,color:totDisburse-totSpend>=0?C.teal:C.neg,fontWeight:600}}>
               {data.years.length}-year net: {fmtS(totDisburse-totSpend)}
             </div>
@@ -5182,7 +5262,7 @@ function App() {
 
       {/* ══════════════ SUBSCRIPTIONS ══════════════ */}
       {tab==="subscriptions" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-subscriptions" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))",gap:16}}>
             {/* Form */}
             <Card>
@@ -5299,7 +5379,7 @@ function App() {
 
       {/* ══════════════ CUSTOMIZE ══════════════ */}
       {tab==="customize" && (
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div role="tabpanel" id="tab-panel" aria-labelledby="tab-customize" tabIndex={0} style={{display:"flex",flexDirection:"column",gap:16}}>
           {/* Lift this card while an icon popover is open — glass cards are stacking contexts,
               so an overflowing absolute popover would otherwise paint under the next card (Key notes). */}
           <Card style={editIconCat||iconPickOpen?{position:"relative",zIndex:50}:undefined}>
