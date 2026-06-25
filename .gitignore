@@ -1,0 +1,20 @@
+# Secrets — NEVER commit these (repo is public)
+.env
+.env.*
+*.env
+secrets.json
+service-role*.txt
+*.pem
+*.key
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs / temp
+*.log
+node_modules/
+.vercel
