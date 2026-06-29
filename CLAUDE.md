@@ -1,6 +1,6 @@
 # Marro
 
-Budget planner for med students (started WCM-specific; generalizing). Single-file app: `index.html` (~3.5k lines, React 18 + Babel standalone + Recharts + supabase-js, no build step). Live at https://wcm-budget.vercel.app — **push to `main` deploys immediately; always ask before pushing.**
+Budget planner for med students (started WCM-specific; generalizing). Single-file app: `index.html` (~3.5k lines, React 18 + Babel standalone + Recharts + supabase-js, no build step). Live at https://joinmarro.com — **push to `main` deploys immediately; always ask before pushing.**
 
 **Auth + data (Phase 2.5b):** Google login via Supabase; per-user state in the `app_state` table (one jsonb blob/user, RLS-gated); `profiles` table holds school. App requires sign-in (hard gate). The transport-agnostic 3-way merge engine is unchanged — Supabase just replaced the old Gist transport. Supabase URL + publishable key are hardcoded in `index.html` (safe — RLS-gated). Project ref `rjowpekykqlounnaegwn`.
 

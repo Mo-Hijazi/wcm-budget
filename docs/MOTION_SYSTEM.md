@@ -13,7 +13,7 @@ Motion conveys state, never decoration (product register). 150–250ms, ease-out
 - Logo rings: `marroRingPop` staggered entrance + `marroDotPulse`.
 - `tipIn` (InfoTip): scale+fade, origin bottom-center, after 140ms hover intent.
 - ProgressBar width .4s; RingProgress stroke-dasharray .4s ease-out.
-- Buttons/tabs: `all .15s`. Sync ring: `wcmpulse`.
+- Buttons/tabs: `all .15s`. Sync ring: `marroPulse`.
 
 ## Rules (Emil Kowalski / Rauno Freiberg / Paco Coursey)
 Check every new animation against these — they caught real violations in Step 3 (box-shadow animation, wrong easing, mobile hover bug).

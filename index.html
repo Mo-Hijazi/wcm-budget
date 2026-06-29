@@ -2496,11 +2496,11 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
               )}
 
               <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:20}}>
-                <div style={{flex:"1 1 150px"}}>
+                <div style={{flex:"1 1 150px",textAlign:"center"}}>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginBottom:8}}>How many years total?</div>
                   <Stepper value={progLen} onChange={setProgLen} min={1} max={8} ariaLabel="Number of years total" suffix={progLen===1?"year":"years"} inputWidth={44}/>
                 </div>
-                <div style={{flex:"1 1 170px"}}>
+                <div style={{flex:"1 1 170px",textAlign:"center"}}>
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginBottom:8}}>When did you start?</div>
                   <Stepper value={startYear} onChange={setStartYear} min={thisYear-10} max={thisYear+1} ariaLabel="Start year, fall" prefix="Fall" inputWidth={64}/>
                 </div>
