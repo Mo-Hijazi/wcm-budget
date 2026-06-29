@@ -1430,6 +1430,31 @@ const ChoiceGroup = ({role="radiogroup", ariaLabel, ariaLabelledby, className, s
 // Spread onto each option button. Active item is the only one in the Tab order.
 const radioProps = active => ({role:"radio","aria-checked":active?"true":"false", tabIndex:active?0:-1});
 const tabProps = (active, id, panelId) => ({role:"tab","aria-selected":active?"true":"false", tabIndex:active?0:-1, id, "aria-controls":panelId});
+// Accessible number stepper (Apple HIG idiom): −/+ buttons flank an editable value,
+// 44×44 hit targets, value clamped to [min,max]. Free typing is allowed and committed
+// (clamped) on blur so multi-digit entry like a year works. Optional prefix/suffix label.
+const Stepper = ({value, onChange, min, max, ariaLabel, prefix, suffix, inputWidth=48}) => {
+  const clamp = v => Math.min(max, Math.max(min, v));
+  const [txt, setTxt] = useState(String(value));
+  useEffect(()=>{ setTxt(String(value)); }, [value]);
+  const btn = on => ({width:44,height:44,flexShrink:0,borderRadius:11,border:`1px solid ${C.border}`,
+    background:"transparent",color:on?C.text:C.gray,fontSize:22,fontWeight:400,lineHeight:1,
+    cursor:on?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"});
+  return (
+    <div role="group" aria-label={ariaLabel} style={{display:"inline-flex",alignItems:"center",gap:8}}>
+      <button type="button" aria-label="Decrease" disabled={value<=min} onClick={()=>onChange(clamp(value-1))} style={btn(value>min)}>−</button>
+      <div style={{flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"0 2px"}}>
+        {prefix && <span style={{fontSize:15,color:C.textMid,fontWeight:500}}>{prefix}</span>}
+        <input type="number" inputMode="numeric" value={txt} min={min} max={max} aria-label={ariaLabel}
+          onChange={e=>{ setTxt(e.target.value); const n=parseInt(e.target.value,10); if(!isNaN(n)&&n>=min&&n<=max) onChange(n); }}
+          onBlur={()=>{ const n=parseInt(txt,10); const c=isNaN(n)?value:clamp(n); onChange(c); setTxt(String(c)); }}
+          style={{width:inputWidth,textAlign:"center",fontSize:17,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 6px",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+        {suffix && <span style={{fontSize:15,color:C.textMid,fontWeight:500}}>{suffix}</span>}
+      </div>
+      <button type="button" aria-label="Increase" disabled={value>=max} onClick={()=>onChange(clamp(value+1))} style={btn(value<max)}>+</button>
+    </div>
+  );
+};
 // Plain scrollable strip (not a choice group, e.g. wide tables) — same edge-fade affordance.
 const ScrollX = ({className, style, children}) => {
   const ref = React.useRef(null);
@@ -2257,6 +2282,11 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
   const [avatar, setAvatar] = useState(data.avatar || (googlePhoto ? {type:"google",url:googlePhoto} : {type:"art",style:"buddy",color:"marigold"}));
   // program shape + dual-degree track — prefill from existing data on redo
   const [progLen, setProgLen] = useState((data.years||[]).length || 4);
+  // When did you start? → Fall [year]. Default to the current fall; feeds
+  // generateYearConfigs(startYear, len) so a student joining partway through
+  // med school gets correctly-dated years without any academic-calendar knowledge.
+  const thisYear = new Date().getFullYear();
+  const [startYear, setStartYear] = useState(thisYear);
   const [dual, setDual]       = useState(data.program?.dual ?? null);   // null|"phd"|"masters"|"other"
   const [phdField, setPhdField] = useState(data.program?.phd?.field || "");
   const [phdSame, setPhdSame]   = useState(!(data.program?.phd?.institution));   // true = same as med school
@@ -2267,7 +2297,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
   const [otherField, setOtherField] = useState(data.program?.other?.field || "");
   const [otherSame, setOtherSame]   = useState(!(data.program?.other?.institution));
   const [otherInst, setOtherInst]   = useState(data.program?.other?.institution || "");
-  const suggestLen = d => d==="phd"?8:d==="masters"?5:4;
+  const suggestLen = d => d==="phd"?7:d==="masters"?5:4;
   // school picker state (mirrors ProfileModal)
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState(null);
@@ -2304,7 +2334,7 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
     };
     // First-run only: generate the year configs from the chosen program length.
     // On redo we never touch years (would wipe the user's budget data).
-    if(firstRun) d.years = generateYearConfigs(new Date().getFullYear(), progLen).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
+    if(firstRun) d.years = generateYearConfigs(startYear, progLen).map(cfg=>({...cfg, monthly:{...BLANK_MONTHLY}, monthlyOverrides:{}}));
     d.setupVersion = SETUP_VERSION;
     upd(d);
     setStep(5);
@@ -2478,15 +2508,17 @@ const OnboardingFlow = ({uid, user, data, upd, onDone, onCancel}) => {
                 </div>
               )}
 
-              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginTop:20,marginBottom:8}}>How many years total?</div>
-              <ChoiceGroup role="radiogroup" ariaLabel="Number of years total" style={{display:"flex",gap:6}}>
-                {[3,4,5,6,7,8].map(n=>(
-                  <button key={n} {...radioProps(progLen===n)} aria-label={n+" years"} onClick={()=>setProgLen(n)} style={{flex:1,padding:"13px 0",borderRadius:11,border:`1px solid ${progLen===n?C.sel:C.border}`,background:progLen===n?C.selBg:"transparent",color:C.text,fontSize:15,fontWeight:progLen===n?700:500,cursor:"pointer",transition:"all .2s"}}>{n}</button>
-                ))}
-              </ChoiceGroup>
-              {firstRun
-                ? <div style={{fontSize:11,color:C.gray,marginTop:10}}>We'll start your first year this {new Date().getFullYear()} — change dates anytime in the Aid tab.</div>
-                : <div style={{fontSize:11,color:C.gray,marginTop:10}}>Your existing year data is kept — use the Aid tab to add or remove years.</div>}
+              <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:20}}>
+                <div style={{flex:"1 1 150px"}}>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginBottom:8}}>How many years total?</div>
+                  <Stepper value={progLen} onChange={setProgLen} min={1} max={8} ariaLabel="Number of years total" suffix={progLen===1?"year":"years"} inputWidth={44}/>
+                </div>
+                <div style={{flex:"1 1 170px"}}>
+                  <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",color:C.textMid,marginBottom:8}}>When did you start?</div>
+                  <Stepper value={startYear} onChange={setStartYear} min={thisYear-10} max={thisYear+1} ariaLabel="Start year, fall" prefix="Fall" inputWidth={64}/>
+                </div>
+              </div>
+              <div style={{fontSize:11,color:C.gray,marginTop:12}}>Your years run from Fall {startYear} to {startYear+progLen}. You can change any dates later in the Aid tab.</div>
               {err && <div role="alert" style={{marginTop:12,fontSize:12,color:C.danger}}>{err}</div>}
               <button className="ob-cta" style={{...ctaPrimary(!saving),marginTop:err?12:18}} disabled={saving} onClick={finish}>{saving?"Setting up…":"Finish"}</button>
               <button onClick={()=>setStep(3)} className="txt-act" style={{display:"block",margin:"12px auto 0",border:"none",background:"transparent",color:C.textMid,fontSize:12.5}}>← Back</button>
@@ -2849,6 +2881,8 @@ function App() {
   const [showAddCat, setShowAddCat] = useState(false);
   const [showAddYear, setShowAddYear] = useState(false);
   const [confirmYearRemove, setConfirmYearRemove] = useState(null);
+  const [yearUndo, setYearUndo] = useState(null); // last soft-deleted year, for the Undo toast
+  useEffect(()=>{ if(!yearUndo) return; const t=setTimeout(()=>setYearUndo(null),8000); return ()=>clearTimeout(t); },[yearUndo]);
   const [confirmReset, setConfirmReset] = useState(false);
   const [dragCat, setDragCat] = useState(null);
   const [dragOverCat, setDragOverCat] = useState(null);
@@ -3497,6 +3531,20 @@ function App() {
     d.years.forEach(y=>{delete y.monthly[cid];});
     upd(d);
   };
+  // Restore a soft-deleted year, exact numbers intact, slotted back in by start date.
+  const reinstateYear = (arch) => {
+    const d=JSON.parse(JSON.stringify(data));
+    d.archivedYears=(d.archivedYears||[]).filter(a=>a.startDate!==arch.startDate);
+    const newId=Math.max(...d.years.map(y=>y.id),-1)+1;
+    d.years.push({...arch, id:newId});
+    d.years.sort((a,b)=>String(a.startDate||"").localeCompare(String(b.startDate||"")));
+    d.years.forEach((y,i)=>{
+      const sy=y.startDate?new Date(y.startDate+"T12:00:00").getFullYear():2025+i;
+      const ey=y.endDate?new Date(y.endDate+"T12:00:00").getFullYear():sy+1;
+      y.label=`Year ${i+1} — ${sy}-${String(ey).slice(2)}`;
+    });
+    upd(d); setAy(newId);
+  };
   const addYear = (start,end) => {
     const d=JSON.parse(JSON.stringify(data));
     const newId=Math.max(...d.years.map(y=>y.id),-1)+1;
@@ -3504,6 +3552,9 @@ function App() {
     const last=d.years[d.years.length-1]||{};
     const sy=start?new Date(start+"T12:00:00").getFullYear():new Date().getFullYear()+d.years.length;
     const ey=end?new Date(end+"T12:00:00").getFullYear():sy+1;
+    // If a year with this same academic start was soft-deleted, restore it (exact numbers) instead of a blank one.
+    const arch=(d.archivedYears||[]).find(a=>a.startDate&&new Date(a.startDate+"T12:00:00").getFullYear()===sy);
+    if(arch){ setShowAddYear(false);setNyStart("");setNyEnd(""); reinstateYear(arch); return; }
     // Inherit the previous year's figures (the user's own data), not any school's defaults.
     d.years.push({
       id:newId, label:`Year ${yrNum} — ${sy}-${String(ey).slice(2)}`,
@@ -3519,6 +3570,13 @@ function App() {
   const removeYear = (yid) => {
     const d=JSON.parse(JSON.stringify(data));
     if(d.years.length<=1) return;
+    // Soft delete: archive the year's data (deduped by start date) so reinstating
+    // it later restores the exact numbers. Not discarded.
+    const removed=d.years.find(y=>y.id===yid);
+    if(removed){
+      d.archivedYears=(d.archivedYears||[]).filter(a=>a.startDate!==removed.startDate);
+      d.archivedYears.push(removed);
+    }
     d.years=d.years.filter(y=>y.id!==yid);
     // Re-number remaining years sequentially
     d.years.forEach((y,i)=>{
@@ -3528,6 +3586,7 @@ function App() {
     });
     upd(d);
     if(ay===yid) setAy(d.years[0].id);
+    if(removed) setYearUndo(removed);
   };
 
   // Charts
@@ -3586,13 +3645,26 @@ function App() {
         </div>
       </Modal>}
       {confirmYearRemove!==null && <Modal title="Remove year" onClose={()=>setConfirmYearRemove(null)} width={350}>
-        <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{data.years.find(y=>y.id===confirmYearRemove)?.label}</strong>? This permanently deletes its budget data and cannot be undone.</div>
+        <div style={{fontSize:13,color:C.textMid,marginBottom:16,lineHeight:1.6}}>Remove <strong>{data.years.find(y=>y.id===confirmYearRemove)?.label}</strong>? Its budget data is kept — you can reinstate this year anytime from <strong>Add year</strong>, and its numbers come right back.</div>
         <div style={{display:"flex",gap:8}}>
           <button className="btn-fill" onClick={()=>setConfirmYearRemove(null)} style={{flex:1.4,padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.creamSoft,color:C.text,cursor:"pointer"}}>Cancel</button>
           <button className="btn-fill" onClick={()=>{removeYear(confirmYearRemove);setConfirmYearRemove(null);}} style={{flex:1,padding:"10px",fontSize:13,fontWeight:600,border:`1px solid ${C.dangerMid}`,borderRadius:8,background:C.dangerLight,color:C.danger,cursor:"pointer"}}>Remove</button>
         </div>
       </Modal>}
       {showAddYear && <Modal title="Add academic year" onClose={()=>setShowAddYear(false)} width={360}>
+        {(data.archivedYears||[]).length>0 && <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.textMid,marginBottom:8}}>Reinstate a removed year</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {data.archivedYears.slice().sort((a,b)=>String(a.startDate||"").localeCompare(String(b.startDate||""))).map(a=>(
+              <button key={a.startDate||a.id} type="button" onClick={()=>{setShowAddYear(false);reinstateYear(a);}}
+                className="menu-row" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,width:"100%",textAlign:"left",padding:"10px 12px",border:`1px solid ${C.border}`,borderRadius:10,background:"transparent",color:C.text,fontSize:13,cursor:"pointer"}}>
+                <span style={{fontWeight:600}}>{a.label}</span>
+                <span style={{fontSize:12,color:C.teal,fontWeight:600,whiteSpace:"nowrap"}}>Reinstate →</span>
+              </button>
+            ))}
+          </div>
+          <div style={{textAlign:"center",fontSize:11,color:C.gray,margin:"14px 0 2px"}}>— or add a new year —</div>
+        </div>}
         <div style={{fontSize:12,color:C.textMid,marginBottom:14}}>The year number is assigned automatically. Enter the start and end dates for this academic year (end of summer break).</div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,fontWeight:600,color:C.textMid,marginBottom:4}}>Start date</div>
@@ -3604,6 +3676,10 @@ function App() {
         </div>
         <button className="btn-fill" onClick={()=>addYear(nyStart,nyEnd)} style={{width:"100%",padding:"10px",fontSize:13,fontWeight:600,border:"none",borderRadius:8,background:C.teal,color:C.bg,cursor:"pointer"}}>Add year</button>
       </Modal>}
+      {yearUndo && <div role="status" style={{position:"fixed",left:"50%",bottom:24,transform:"translateX(-50%)",zIndex:1200,display:"flex",alignItems:"center",gap:16,maxWidth:"calc(100vw - 32px)",padding:"11px 12px 11px 16px",borderRadius:12,background:C.surface,border:`1px solid ${C.border}`,boxShadow:"0 8px 30px rgba(0,0,0,0.28)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+        <span style={{fontSize:13,color:C.text}}>Removed <strong>{yearUndo.label.split("—")[0].trim()}</strong>. Its data is saved.</span>
+        <button onClick={()=>{reinstateYear(yearUndo);setYearUndo(null);}} style={{flexShrink:0,padding:"7px 14px",fontSize:13,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:9,background:"transparent",color:C.teal,cursor:"pointer"}}>Undo</button>
+      </div>}
       {confirmRemove && <Modal title="Remove category" onClose={()=>setConfirmRemove(null)} width={340}>
         <div style={{fontSize:13,color:C.textMid,marginBottom:16}}>Remove <strong>{cats.find(c=>c.id===confirmRemove)?.label}</strong> from {MONTH_FULL[selMonth]}? You can add it back anytime.</div>
         <div style={{display:"flex",gap:8}}>
