@@ -45,6 +45,7 @@ Don't scan the file; `grep -n` the key for the section you need. Keys are stable
 - `PRODUCT_DECISIONS.md` — decisions + rationale
 - `ROADMAP.md` — phase plan and status
 - `STRATEGY.md` — company/business/AI vision, monetization, people & equity, legal, infra hygiene, two-founder collaboration model
+- `AI_COST_MODEL.md` — plain-language AI cost model: per-feature/user/scale cost, Haiku/Sonnet/Opus routing, cost-control levers, launch safeguards, staged pricing (read before Phase 4 AI work)
 - `FUTURE_WORK.md` — prioritized backlog
 
 ## Critical rules

@@ -9,6 +9,7 @@ Budget planner for med students (started WCM-specific; generalizing). Single-fil
 - `docs/DATA_MODEL.md` — state schema, **savings↔weekly↔budget linkage (read before touching that logic)**, Supabase sync + auth
 - `docs/DESIGN_SYSTEM.md` + `docs/MOTION_SYSTEM.md` — read before any UI/animation work
 - `docs/ROADMAP.md` — phase status · `docs/FUTURE_WORK.md` — backlog
+- `docs/AI_COST_MODEL.md` — AI cost model, model routing, cost controls + launch safeguards, staged pricing (read before any Phase 4 AI work)
 - `docs/STRATEGY.md` — company/business/AI vision, monetization, equity, legal, infra, two-founder collaboration model (the *why* behind the roadmap)
 - `docs/DATA_ETHICS.md` — **source of truth for sell-vs-don't-sell, aggregate data, partner offers, consent, and all privacy copy (read before any data/monetization/privacy-copy work — see rule 10)**
 
