@@ -5056,25 +5056,35 @@ function App() {
   );
 }
 
-// ── PWA update prompt ─────────────────────────────────────────────────────────
+// ── PWA silent auto-update ─────────────────────────────────────────────────────
 // vite-plugin-pwa precaches the fingerprinted build; when a new deploy is detected
-// the service worker installs and *waits*. Rather than force-reload (which could
-// wipe an in-progress edit), we surface a calm, dismissible toast — the reload
-// only happens the moment the user taps it, so it's provably never mid-edit.
-// Mirrors the yearUndo toast for visual + a11y consistency (role="status", glass).
-function UpdateToast(){
-  const { needRefresh:[needRefresh,setNeedRefresh], updateServiceWorker } = useRegisterSW({
+// the service worker installs and *waits*. We never interrupt the user to apply it.
+// Instead we swap to the new version silently, only at a provably safe moment:
+//   • the tab is backgrounded (visibilityState === "hidden" → the user isn't looking), AND
+//   • nothing is mid-flow — no open modal (role="dialog") and no focused text field.
+// If that moment never arrives, the waiting worker still activates on its own the
+// next time the app is fully closed and reopened. So the update always lands
+// eventually, but can never reload the page out from under an in-progress action.
+function SilentUpdater(){
+  const { needRefresh:[needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisterError(err){ console.error('SW registration error', err); },
   });
-  if(!needRefresh) return null;
-  return (
-    <div role="status" style={{position:"fixed",left:"50%",bottom:24,transform:"translateX(-50%)",zIndex:1300,display:"flex",alignItems:"center",gap:16,maxWidth:"calc(100vw - 32px)",padding:"11px 12px 11px 16px",borderRadius:12,background:C.surface,border:`1px solid ${C.border}`,boxShadow:"0 8px 30px rgba(0,0,0,0.28)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
-      <span style={{fontSize:13,color:C.text}}>A new version of Marro is ready.</span>
-      <button onClick={()=>setNeedRefresh(false)} style={{flexShrink:0,padding:"7px 12px",fontSize:13,fontWeight:500,border:"none",borderRadius:9,background:"transparent",color:C.gray,cursor:"pointer"}}>Later</button>
-      <button onClick={()=>updateServiceWorker(true)} style={{flexShrink:0,padding:"7px 14px",fontSize:13,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:9,background:"transparent",color:C.teal,cursor:"pointer"}}>Reload</button>
-    </div>
-  );
+  React.useEffect(() => {
+    if(!needRefresh) return;
+    const safeToReload = () => {
+      if(document.visibilityState !== 'hidden') return false;      // user is watching
+      if(document.querySelector('[role="dialog"]')) return false;  // a modal is open
+      const ae = document.activeElement;                           // an inline edit is focused
+      if(ae && ae.matches && ae.matches('input,textarea,[contenteditable="true"]')) return false;
+      return true;
+    };
+    const attempt = () => { if(safeToReload()) updateServiceWorker(true); };
+    document.addEventListener('visibilitychange', attempt);
+    attempt(); // already backgrounded when the update landed? apply now.
+    return () => document.removeEventListener('visibilitychange', attempt);
+  }, [needRefresh, updateServiceWorker]);
+  return null;
 }
 
 const root=createRoot(document.getElementById('root'));
-root.render(<React.Fragment><App/><UpdateToast/></React.Fragment>);
+root.render(<React.Fragment><App/><SilentUpdater/></React.Fragment>);

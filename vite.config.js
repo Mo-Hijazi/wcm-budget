@@ -10,8 +10,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // We surface our own accessible "Update ready" toast in-app (see UpdateToast
-      // in src/main.jsx), so the new build is never force-reloaded mid-edit.
+      // 'prompt' hands update control to the app (no auto-reload). SilentUpdater in
+      // src/main.jsx then applies the new build silently, only when the tab is
+      // backgrounded and nothing is mid-flow — so it never reloads mid-edit.
       registerType: 'prompt',
       injectRegister: false,
       // Keep the existing hand-authored public/manifest.json + its <link> in index.html.

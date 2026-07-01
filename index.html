@@ -501,7 +501,8 @@
   <div class="boot-sub">Counting the rings…</div>
 </div></div>
 <!-- Service worker is registered from src/main.jsx via vite-plugin-pwa's
-     useRegisterSW hook, which drives the in-app "Update ready" toast. -->
+     useRegisterSW hook (SilentUpdater), which applies new builds silently
+     at a safe moment — never mid-edit. -->
 <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

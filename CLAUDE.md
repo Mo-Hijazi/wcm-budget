@@ -1,6 +1,6 @@
 # Marro
 
-Budget planner for med students (started WCM-specific; generalizing). **Vite app** (Phase 3.5): the React 18 + Recharts + supabase-js code lives in `src/main.jsx` (~5k lines, still one file — component split is the next 3.5 step); `index.html` is the thin entry; static assets in `public/`. Offline via `vite-plugin-pwa` (Workbox precache + in-app "Update ready" toast). Live at https://joinmarro.com — **push to `main` deploys immediately; always ask before pushing.**
+Budget planner for med students (started WCM-specific; generalizing). **Vite app** (Phase 3.5): the React 18 + Recharts + supabase-js code lives in `src/main.jsx` (~5k lines, still one file — component split is the next 3.5 step); `index.html` is the thin entry; static assets in `public/`. Offline via `vite-plugin-pwa` (Workbox precache; new builds apply silently via `SilentUpdater` only when the tab is backgrounded and nothing is mid-flow — never mid-edit). Live at https://joinmarro.com — **push to `main` deploys immediately; always ask before pushing.**
 
 **Auth + data (Phase 2.5b):** Google login via Supabase; per-user state in the `app_state` table (one jsonb blob/user, RLS-gated); `profiles` table holds school. App requires sign-in (hard gate). The transport-agnostic 3-way merge engine is unchanged — Supabase just replaced the old Gist transport. Supabase URL + publishable key are hardcoded in `index.html` (safe — RLS-gated). Project ref `rjowpekykqlounnaegwn`.
 
