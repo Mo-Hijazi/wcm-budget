@@ -3,9 +3,11 @@
   "configurations": [
     {
       "name": "marro",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "3456", "--directory", "/Users/mohijazi/Desktop/marro"],
-      "port": 3456
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "/Users/mohijazi/Desktop/marro",
+      "port": 3456,
+      "autoPort": false
     }
   ]
 }
