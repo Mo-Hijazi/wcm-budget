@@ -104,7 +104,10 @@ export const fmtWeekLabel = wk => {
 
 export const daysUntil = dateStr => {
   if(!dateStr) return null;
-  const now = new Date(); now.setHours(0,0,0,0);
+  // Anchor BOTH ends at local noon: the target uses T12:00:00 to stay DST-safe,
+  // so `now` must match it — flooring to midnight added a spurious +0.5 that
+  // rounded every future date up by one (today→1, tomorrow→2). See format.test.js.
+  const now = new Date(); now.setHours(12,0,0,0);
   const t = new Date(dateStr+"T12:00:00");
   return Math.round((t-now)/86400000);
 };

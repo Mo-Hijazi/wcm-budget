@@ -41,4 +41,13 @@ export default defineConfig({
   server: {
     port: 3456,
   },
+  test: {
+    // jsdom so importing src/lib/data.js is safe — that module runs a bare
+    // setInterval IIFE on import whose callback touches `window`.
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+    // Deterministic money/date math: pin the runner to a fixed clock/locale.
+    // (Individual tests still pass explicit dates; this guards the defaults.)
+    globals: false,
+  },
 });
